@@ -9,3 +9,9 @@ well contained feature set) and maintain you're delta as a 'layer' that gets
 composed with its base to produce a new charm.
 
 This process should be runnable repeatedly allowing charms to be regenerated.
+
+
+This work is currently feature incomplete but does allow the generation of
+simple charms and useful basic composition. It is my hope that this will
+encourage discussion of the feature set needed to one day have charm
+composition supported natively in juju-core.
