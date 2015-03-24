@@ -53,6 +53,10 @@ class TestCompose(unittest.TestCase):
 
         self.assertTrue((base / "README.md").exists())
 
+    def test_regenerate_inplace(self):
+        pass
+
+
 
 if __name__ == '__main__':
     logging.basicConfig()
