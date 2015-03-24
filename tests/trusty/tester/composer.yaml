@@ -1,0 +1,9 @@
+inherits: ["tests/trusty/mysql"]
+ignore:
+    - .bzr/*
+    - .git/*
+config:
+    deletes:
+        - vip
+        - vip_iface
+        - vip_cidr
