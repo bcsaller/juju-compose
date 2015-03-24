@@ -15,3 +15,21 @@ This work is currently feature incomplete but does allow the generation of
 simple charms and useful basic composition. It is my hope that this will
 encourage discussion of the feature set needed to one day have charm
 composition supported natively in juju-core.
+
+
+Today the system can be run as follows:
+
+    ./juju_compose.py -o <output_repo> <output_charm_name> <charm to build from>
+
+So you might use the included (very unrealistic) test case as like:o
+
+    ./juju_compose -o out foo tests/trusty/tester
+
+Running this should produce a charm in out/trusty/foo which is composed
+according to the composer.yaml file in tests/trusty/tester. While this isn't
+documented yet it shows some of the basic features of diverting hooks (for
+pre/post hooks support), replacing files, merging metadata.yaml changes, etc.
+
+It should be enough to give you an idea how it works. In order for this example
+to run you'll need to pip install bundletester as it shares some code with that
+project.
