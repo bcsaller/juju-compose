@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import argparse
-import copy
 import fnmatch
 import logging
 import os
@@ -10,21 +9,7 @@ import yaml
 from collections import OrderedDict
 from path import path
 from bundletester import fetchers
-
-
-def deepmerge(dest, src):
-    """
-    Deep merge of two dicts.
-
-    This is destructive (`dest` is modified), but values
-    from `src` are passed through `copy.deepcopy`.
-    """
-    for k, v in src.iteritems():
-        if dest.get(k) and isinstance(v, dict):
-            deepmerge(dest[k], v)
-        else:
-            dest[k] = copy.deepcopy(v)
-    return dest
+import utils
 
 
 class ComposerConfig(dict):
@@ -234,10 +219,10 @@ class YAMLTactic(Tactic):
             existing = {}
 
         if basemeta:
-            data = deepmerge(basemeta, existing)
-            data = deepmerge(data, current)
+            data = utils.deepmerge(basemeta, existing)
+            data = utils.deepmerge(data, current)
         else:
-            data = deepmerge(existing, current)
+            data = utils.deepmerge(existing, current)
 
         # Now apply any rules from config
         config = self.config
@@ -400,7 +385,6 @@ class Composer(object):
         self.create_repo()
         results = self.fetch()
         plan = self.formulate_plan(results)
-
         # now execute the plan
         for tactic in plan:
             tactic()

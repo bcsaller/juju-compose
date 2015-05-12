@@ -21,7 +21,7 @@ Today the system can be run as follows:
 
     ./juju_compose.py -o <output_repo> <output_charm_name> <charm to build from>
 
-So you might use the included (very unrealistic) test case as like:o
+So you might use the included (very unrealistic) test case as like:
 
     ./juju_compose -o out foo tests/trusty/tester
 
@@ -33,3 +33,13 @@ pre/post hooks support), replacing files, merging metadata.yaml changes, etc.
 It should be enough to give you an idea how it works. In order for this example
 to run you'll need to pip install bundletester as it shares some code with that
 project.
+
+
+TODO:
+- lint about methods in base layer not provided/extended in lower
+layers
+- support for loading interface stubs
+- Pluggable directives
+
+
+
