@@ -1,4 +1,5 @@
 import logging
+import json
 import yaml
 
 import utils
@@ -27,7 +28,7 @@ class Tactic(object):
         raise NotImplementedError
 
     def __str__(self):
-        raise NotImplementedError
+        return "{}: {} -> {}".format(self.__class__.__name__, self.entity, self.target_file)
 
     @property
     def source(self):
@@ -71,7 +72,7 @@ class Tactic(object):
         # as that is the one that controls your compositing
         if self.index + 1 < len(self.layers):
             return self.layers[self.index + 1].config
-        return ComposerConfig()
+        return None
 
     def combine(self, existing):
         """Produce a tactic informed by the last tactic for an entry.
@@ -112,27 +113,22 @@ class ComposerYAML(Tactic):
                        default_flow_style=False)
 
 
-class YAMLTactic(Tactic):
-    """Rule Driven YAML generation"""
-    prefix = None
+class SerializedTactic(Tactic):
+    def __init__(self, *args, **kwargs):
+        super(SerializedTactic, self).__init__(*args, **kwargs)
+        self.data = None
+
+    def combine(self, existing):
+        existing()
+        if existing.data is not None:
+            self.data = existing.data.copy()
+        return self
 
     def __call__(self):
-        target = self.target_file
-        current = yaml.safe_load(self.entity.open())
-        meta = (self.current.directory / self.entity.basename())
-        basemeta = (self.source.directory / self.entity.basename())
-        if basemeta.exists():
-            basemeta = yaml.safe_load(basemeta.open())
-        if meta.exists():
-            existing = yaml.safe_load(meta.open())
-        else:
-            existing = {}
-
-        if basemeta:
-            data = utils.deepmerge(basemeta, existing)
-            data = utils.deepmerge(data, current)
-        else:
-            data = utils.deepmerge(existing, current)
+        data = self.load(self.entity.open())
+        # self.data represents the product of previous layers
+        if self.data:
+            data = utils.deepmerge(self.data, data)
 
         # Now apply any rules from config
         config = self.config
@@ -145,16 +141,37 @@ class YAMLTactic(Tactic):
                 else:
                     namespace = data
                 for key in dels:
-                    del namespace[key]
-        yaml.safe_dump(data, target.open('w'), default_flow_style=False)
+                    utils.delete_path(key, namespace)
+        self.data = data
+        self.dump(data)
+
+
+class YAMLTactic(SerializedTactic):
+    """Rule Driven YAML generation"""
+    prefix = None
+
+    def load(self, fn):
+        return yaml.safe_load(fn)
+
+    def dump(self, data):
+        yaml.safe_dump(data, self.target_file.open('w'),
+                       default_flow_style=False)
+
+
+class JSONTactic(SerializedTactic):
+    """Rule Driven JSON generation"""
+    prefix = None
+
+    def load(self, fn):
+        return json.load(fn)
+
+    def dump(self, data):
+        json.dump(data, self.target_file.open('w'), indent=2)
 
 
 class MetadataYAML(YAMLTactic):
     """Rule Driven metadata.yaml generation"""
     section = "metadata"
-
-    def __str__(self):
-        return "Generating metadata.yaml"
 
     @classmethod
     def trigger(cls, relpath):
@@ -165,9 +182,6 @@ class ConfigYAML(MetadataYAML):
     """Rule driven config.yaml generation"""
     section = "config"
     prefix = "options"
-
-    def __str__(self):
-        return "Generating config.yaml"
 
     @classmethod
     def trigger(cls, relpath):

@@ -1,5 +1,5 @@
 test: clean
-	nosetests
+	tox
 
 clean:
 	@rm -rf out *.pyc

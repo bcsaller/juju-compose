@@ -1,4 +1,4 @@
-from path import path
+from juju_compose.path import path
 import logging
 import unittest
 import juju_compose
@@ -52,10 +52,10 @@ class TestCompose(unittest.TestCase):
         self.assertIn("Overridden", start.text())
 
         self.assertTrue((base / "README.md").exists())
+        self.assertEqual("dynamic tactics", (base / "README.md").text())
 
     def test_regenerate_inplace(self):
         pass
-
 
 
 if __name__ == '__main__':

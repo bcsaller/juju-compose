@@ -1,4 +1,4 @@
-from juju_compose import Tactic
+from juju_compose.tactics import Tactic
 
 
 

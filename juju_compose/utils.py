@@ -7,6 +7,8 @@ import subprocess
 import time
 from contextlib import contextmanager
 
+from .path import path
+
 log = logging.getLogger('utils')
 
 
@@ -35,6 +37,14 @@ def deepmerge(dest, src):
         else:
             dest[k] = copy.deepcopy(v)
     return dest
+
+
+def delete_path(path, obj):
+    """Delete a dotted path from object, assuming each level is a dict"""
+    parts = path.split('.')
+    for p in parts[:-1]:
+        obj = obj[p]
+    del obj[parts[-1]]
 
 
 class NestedDict(dict):
@@ -264,9 +274,30 @@ def which(program):
         if is_exe(program):
             return program
     else:
-        for path in os.environ["PATH"].split(os.pathsep):
-            path = path.strip('"')
-            exe_file = os.path.join(path, program)
+        for fpath in os.environ["PATH"].split(os.pathsep):
+            fpath = fpath.strip('"')
+            exe_file = os.path.join(fpath, program)
             if is_exe(exe_file):
                 return exe_file
     return None
+
+
+def load_class(dpath, workingdir=None):
+    # we expect the last element of the path
+    if not workingdir:
+        workingdir = os.getcwd()
+    with cd(workingdir):
+        modpath, classname = dpath.rsplit('.', 1)
+        modpath = path(modpath.replace(".", "/"))
+        if not modpath.exists():
+            modpath += ".py"
+        if not modpath.exists():
+            raise OSError("Unable to load {} from {}".format(
+                dpath, workingdir))
+        namespace = {}
+        execfile(modpath, globals(), namespace)
+        klass = namespace.get(classname)
+        if klass is None:
+            raise ImportError("Unable to load class {} at {}".format(
+                classname, dpath))
+        return klass
