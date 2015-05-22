@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import argparse
+import json
 import logging
 import os
 
@@ -20,6 +21,9 @@ class Charm(object):
 
     def __repr__(self):
         return "<Charm {}:{}>".format(self.url, self.directory)
+
+    def __div__(self, other):
+        return self.directory / other
 
     def fetch(self):
         fetcher = fetchers.get_fetcher(self.url)
@@ -108,9 +112,7 @@ class Composer(object):
         """Build out a plan for each file in the various composed
         layers, taking into account config at each layer"""
         output_files = OrderedDict()
-        # Add in the last layer so our pairwise walk works
-        layers = charms + [self.target]
-        for i, charm in enumerate(layers):
+        for i, charm in enumerate(charms):
             logging.info("Processing charm layer: %s", charm.directory.name)
             # walk the charm, consulting the config
             # and creating an entry
@@ -121,23 +123,34 @@ class Composer(object):
                 # Delegate to the config object, it's rules
                 # will produce a tactic
                 relname = entry.relpath(charm.directory)
-                current = charm.config.tactic(entry, layers, i, self.target)
+                current = charm.config.tactic(entry, charms, i, self.target)
                 existing = output_files.get(relname)
                 if existing is not None:
                     tactic = current.combine(existing)
                 else:
                     tactic = current
                 output_files[relname] = tactic
-        return [t for t in output_files.values() if t]
+        self.plan = [t for t in output_files.values() if t]
+        return self.plan
+
+    def __call__(self, plan=None):
+        if not plan:
+            plan = self.plan
+        signatures = {}
+        for tactic in plan:
+            tactic()
+            sig = tactic.sign()
+            if sig:
+                signatures.update(sig)
+        # write out the sigs
+        sigs = self.target / ".composer.manifest"
+        sigs.write_text(json.dumps(signatures, indent=2))
 
     def generate(self):
         self.create_repo()
         results = self.fetch()
-        plan = self.formulate_plan(results)
-        # now execute the plan
-        for tactic in plan:
-            tactic()
-
+        self.formulate_plan(results)
+        self()
 
 def main(args=None):
     composer = Composer()

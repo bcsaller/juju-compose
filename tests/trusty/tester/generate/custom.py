@@ -1,7 +1,6 @@
 from juju_compose.tactics import Tactic
 
 
-
 class READMETactic(Tactic):
     """Example dynamically loaded tactic"""
     @classmethod

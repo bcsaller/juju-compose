@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import json
 import yaml
@@ -33,7 +34,6 @@ class Tactic(object):
     @property
     def source(self):
         """The file in the bottom most layer being processed"""
-
         return self.layers[max(self.index - 1, 0)]
 
     @property
@@ -57,6 +57,10 @@ class Tactic(object):
 
     @property
     def layer_name(self):
+        return self.current.directory.name
+
+    @property
+    def source_layer(self):
         return self.source.directory.name
 
     def find(self, name):
@@ -84,6 +88,17 @@ class Tactic(object):
     def trigger(cls, relpath):
         """Should the rule trigger for a given path object"""
         return False
+
+    def sign(self):
+        """return sign in the form {relpath: (origin layer, SHA256)}
+        """
+        target = self.target_file
+        sig = {}
+        if target.exists():
+            sig[self.relpath] = (self.layer_name,
+                                 hashlib.sha256(target.text()).hexdigest())
+        return sig
+
 
 
 class CopyTactic(Tactic):
@@ -211,7 +226,7 @@ class HookTactic(Tactic):
             # road.
             # create the wrapper
             # divert the main hook
-            main.copy2(target.stripext() + "." + self.layer_name)
+            main.copy2(target.stripext() + "." + self.source_layer)
             self.entity.copy2(target)
             # and write the bash wrapper
             hook = (self.target.directory / self.relpath.stripext())
@@ -220,7 +235,7 @@ set -e
 [ -e {hook}.pre ] && {hook}.pre
 {hook}.{layer}
 [ -e {hook}.post ] && {hook}.post
-            """.format(hook=self.relpath.stripext(), layer=self.layer_name))
+            """.format(hook=self.relpath.stripext(), layer=self.source_layer))
         else:
             self.entity.copy2(target)
 
