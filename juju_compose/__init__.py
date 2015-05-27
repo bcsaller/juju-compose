@@ -26,11 +26,18 @@ class Charm(object):
         return self.directory / other
 
     def fetch(self):
-        fetcher = fetchers.get_fetcher(self.url)
-        if isinstance(fetcher, fetchers.LocalFetcher):
-            self.directory = path(fetcher.path)
+        try:
+            fetcher = fetchers.get_fetcher(self.url)
+        except fetchers.FetchError:
+            # We might be passing a local dir path directly
+            # which fetchers don't currently  support
+            self.directory = path(self.url)
         else:
-            self.directory = path(fetcher.fetch(self.target_repo))
+            if isinstance(fetcher, fetchers.LocalFetcher):
+                self.directory = path(fetcher.path)
+            else:
+                self.directory = path(fetcher.fetch(self.target_repo))
+
         metadata = self.directory / "metadata.yaml"
         if not metadata.exists():
             logging.warn("{} has no metadata.yaml, is it a charm".format(
@@ -70,6 +77,7 @@ class Composer(object):
         # outside the series
         self.deps = (base / "deps" / self.series).makedirs_p()
         self.target_dir = (self.repo / self.name).mkdir_p()
+        print vars(self)
 
     def fetch(self):
         charm = Charm(self.charm, self.deps).fetch()
@@ -152,18 +160,25 @@ class Composer(object):
         self.formulate_plan(results)
         self()
 
+
 def main(args=None):
     composer = Composer()
     parser = argparse.ArgumentParser()
     parser.add_argument('-l', '--log-level', default=logging.INFO)
     parser.add_argument('-f', '--force', action="store_true")
-    parser.add_argument('-o', '--output-dir',
-                        default=os.environ.get("JUJU_REPOSITORY", "."))
+    parser.add_argument('-o', '--output-dir')
     parser.add_argument('-s', '--series', default="trusty")
-    parser.add_argument('name', help="Generate a charm of 'name' from 'charm'")
+    parser.add_argument('-n', '--name',
+                        default=path(os.getcwd).dirname(),
+                        help="Generate a charm of 'name' from 'charm'")
     parser.add_argument('charm', default=".")
     # Namespace will set the options as attrs of composer
     parser.parse_args(args, namespace=composer)
+    if not composer.name:
+        composer.name = path(composer.charm).normpath().basename()
+    if not composer.output_dir:
+        composer.output_dir = path(composer.charm)
+
     logging.basicConfig(level=composer.log_level)
     composer.generate()
 

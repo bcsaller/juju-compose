@@ -42,6 +42,11 @@ class TestCompose(unittest.TestCase):
         self.assertIn("bind-address", config_data)
         self.assertNotIn("vip", config_data)
 
+        cyaml = base / "composer.yaml"
+        self.assertTrue(cyaml.exists())
+        cyaml_data = yaml.load(cyaml.open())
+        self.assertEquals(cyaml_data['inherits'], ['trusty/tester'])
+
         # XXX: verify contents
         self.assertTrue((base / "hooks/config-changed").exists())
         self.assertTrue((base / "hooks/config-changed.pre").exists())

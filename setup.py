@@ -9,4 +9,9 @@ setup(name='composer',
             author_email='benjamin.saller@canonical.com',
             url='https://github.com/bcsaller/juju_compose',
             packages=['juju_compose'],
-           )
+            entry_points={
+                'console_scripts': [
+                    'juju-compose = juju_compose:main',
+                ]
+            }
+      )

@@ -119,15 +119,6 @@ class CopyTactic(Tactic):
         return True
 
 
-class ComposerYAML(Tactic):
-    def __call__(self):
-        # rewrite inherits to be the current source
-        data = yaml.load(self.entity.open())
-        data['inherits'] = ["/".join(self.current.directory.splitall()[-2:])]
-        yaml.safe_dump(data, self.target_file.open('w'),
-                       default_flow_style=False)
-
-
 class SerializedTactic(Tactic):
     def __init__(self, *args, **kwargs):
         super(SerializedTactic, self).__init__(*args, **kwargs)
@@ -160,7 +151,6 @@ class SerializedTactic(Tactic):
         self.data = data
         self.dump(data)
 
-
 class YAMLTactic(SerializedTactic):
     """Rule Driven YAML generation"""
     prefix = None
@@ -182,6 +172,20 @@ class JSONTactic(SerializedTactic):
 
     def dump(self, data):
         json.dump(data, self.target_file.open('w'), indent=2)
+
+
+class ComposerYAML(YAMLTactic):
+    def __call__(self):
+        # rewrite inherits to be the current source
+        data = yaml.load(self.entity.open())
+        # The split should result in the series/charm path only
+        # XXX: there will be strange interactions with cs: vs local:
+        data['inherits'] = ["/".join(self.current.directory.splitall()[-2:])]
+        self.dump(data)
+
+    @classmethod
+    def trigger(cls, relpath):
+        return relpath == "composer.yaml"
 
 
 class MetadataYAML(YAMLTactic):
@@ -268,5 +272,6 @@ DEFAULT_TACTICS = [
     ConfigYAML,
     HookTactic,
     ActionTactic,
+    ComposerYAML,
     CopyTactic
 ]
