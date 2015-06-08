@@ -21,7 +21,7 @@ class TestCompose(unittest.TestCase):
         composer.series = "trusty"
         composer.name = "foo"
         composer.charm = "tests/trusty/tester"
-        composer.generate()
+        composer()
         base = path('out/trusty/foo')
         self.assertTrue(base.exists())
 
@@ -48,10 +48,7 @@ class TestCompose(unittest.TestCase):
         #self.assertEquals(cyaml_data['inherits'], ['trusty/mysql'])
         self.assertEquals(cyaml_data['is'], ['trusty/tester'])
 
-        # XXX: verify contents
         self.assertTrue((base / "hooks/config-changed").exists())
-        self.assertTrue((base / "hooks/config-changed.pre").exists())
-        self.assertTrue((base / "hooks/config-changed.mysql").exists())
 
         # Files from the top layer as overrides
         start = base / "hooks/start"
@@ -66,10 +63,12 @@ class TestCompose(unittest.TestCase):
         data = json.load(sigs.open())
         self.assertEquals(data["README.md"], [
             u'tester',
+            "static",
             u'cfac20374288c097975e9f25a0d7c81783acdbc8124302ff4a731a4aea10de99'])
 
         self.assertEquals(data['metadata.yaml'], [
             u'tester',
+            "dynamic",
             u'60a517b47b001b4ac63048576148c3487f7c3a9ce70322f756218c3ca337275d'])
 
     def test_regenerate_inplace(self):

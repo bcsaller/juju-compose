@@ -218,44 +218,8 @@ class ConfigYAML(MetadataYAML):
         return relpath == "config.yaml"
 
 
-class HookTactic(Tactic):
+class HookTactic(CopyTactic):
     """Rule Generated Hooks"""
-
-    def __call__(self):
-        target = self.target_file
-        target.dirname().makedirs_p()
-        if self.entity.isdir():
-            return
-        if self.entity.ext == ".pre" or self.entity.ext == ".post":
-            # we are looking at the entry for a hook wrapper
-            # we'll have to look at the lower layer to replace its
-            # hook.
-            main = self.find(self.relpath.stripext())
-            if not main:
-                # we couldn't find the hook they want to pre/post
-                logging.warn(
-                    "Attempt to divert hook %s failed, original missing",
-                    self.entity)
-                return
-            # XXX: This is not smart enough to divert the same hook more than
-            # once through multiple layers though that is desirable down the
-            # road.
-            # create the wrapper
-            # divert the main hook
-            self.kind = "dynamic"
-            main.copy2(target.stripext() + "." + self.source_layer)
-            self.entity.copy2(target)
-            # and write the bash wrapper
-            hook = (self.target.directory / self.relpath.stripext())
-            hook.write_text("""#!/bin/bash
-set -e
-[ -e {hook}.pre ] && {hook}.pre
-{hook}.{layer}
-[ -e {hook}.post ] && {hook}.post
-            """.format(hook=self.relpath.stripext(), layer=self.source_layer))
-        else:
-            self.entity.copy2(target)
-
     def __str__(self):
         return "Handling Hook {}".format(self.entity)
 
@@ -265,6 +229,9 @@ set -e
 
 
 class ActionTactic(HookTactic):
+    def __str__(self):
+        return "Handling Action {}".format(self.entity)
+
     @classmethod
     def trigger(cls, relpath):
         return relpath.dirname() == "actions"

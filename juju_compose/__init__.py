@@ -184,6 +184,11 @@ class Composer(object):
             a, c, d = utils.delta_signatures(p)
             print a, c, d
 
+    def __call__(self):
+        self.find_or_create_repo()
+        self.validate()
+        self.generate()
+
 
 def main(args=None):
     composer = Composer()
@@ -205,9 +210,7 @@ def main(args=None):
 
     logging.basicConfig(level=composer.log_level)
 
-    composer.find_or_create_repo()
-    composer.validate()
-    composer.generate()
+    composer()
 
 
 if __name__ == '__main__':
