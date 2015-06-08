@@ -9,7 +9,7 @@ from collections import OrderedDict
 from .path import path
 from .config import ComposerConfig
 from bundletester import fetchers
-
+import utils
 
 class Charm(object):
     def __init__(self, url, target_repo):
@@ -66,6 +66,7 @@ class Composer(object):
         self.config = ComposerConfig()
 
     def configure(self, config_file):
+        self.charm = path(self.charm)
         self.config.configure(config_file)
         self.config.validate()
 
@@ -77,7 +78,20 @@ class Composer(object):
         # outside the series
         self.deps = (base / "deps" / self.series).makedirs_p()
         self.target_dir = (self.repo / self.name).mkdir_p()
-        print vars(self)
+
+    def find_or_create_repo(self):
+        # see if output dir is already in a repo, we can use that directly
+        if self.output_dir == path(self.charm).normpath():
+            # we've indicated in the cmdline that we are doing an inplace
+            # update
+            if self.output_dir.parent.basename() == self.series:
+                # we're already in a repo
+                self.repo = self.output_dir.parent.parent
+                self.deps = (self.repo / "deps" / self.series).makedirs_p()
+                self.target_dir = self.output_dir
+                return
+        self.create_repo()
+
 
     def fetch(self):
         charm = Charm(self.charm, self.deps).fetch()
@@ -141,24 +155,34 @@ class Composer(object):
         self.plan = [t for t in output_files.values() if t]
         return self.plan
 
-    def __call__(self, plan=None):
+    def exec_plan(self, plan=None):
         if not plan:
             plan = self.plan
         signatures = {}
-        for tactic in plan:
-            tactic()
-            sig = tactic.sign()
-            if sig:
-                signatures.update(sig)
+        for phase in ['lint', '__call__', 'sign']:
+            for tactic in plan:
+                if phase == "lint":
+                    tactic.lint()
+                elif phase == "__call__":
+                    tactic()
+                elif phase == "sign":
+                    sig = tactic.sign()
+                    if sig:
+                        signatures.update(sig)
         # write out the sigs
         sigs = self.target / ".composer.manifest"
         sigs.write_text(json.dumps(signatures, indent=2))
 
     def generate(self):
-        self.create_repo()
         results = self.fetch()
         self.formulate_plan(results)
-        self()
+        self.exec_plan()
+
+    def validate(self):
+        p = self.target_dir / ".composer.manifest"
+        if p.exists():
+            a, c, d = utils.delta_signatures(p)
+            print a, c, d
 
 
 def main(args=None):
@@ -171,15 +195,18 @@ def main(args=None):
     parser.add_argument('-n', '--name',
                         default=path(os.getcwd).dirname(),
                         help="Generate a charm of 'name' from 'charm'")
-    parser.add_argument('charm', default=".")
+    parser.add_argument('charm', default=".", type=path)
     # Namespace will set the options as attrs of composer
     parser.parse_args(args, namespace=composer)
     if not composer.name:
         composer.name = path(composer.charm).normpath().basename()
     if not composer.output_dir:
-        composer.output_dir = path(composer.charm)
+        composer.output_dir = path(composer.charm).normpath()
 
     logging.basicConfig(level=composer.log_level)
+
+    composer.find_or_create_repo()
+    composer.validate()
     composer.generate()
 
 

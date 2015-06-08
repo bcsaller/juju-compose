@@ -1,4 +1,3 @@
-import hashlib
 import logging
 import json
 import yaml
@@ -18,6 +17,8 @@ class Tactic(object):
     Subclasses should implement __str__ and __call__ which should take whatever
     actions are needed.
     """
+    kind = "static"  # used in signatures
+
     def __init__(self, entity, layers, index, target):
         self.index = index
         self.entity = entity
@@ -29,7 +30,8 @@ class Tactic(object):
         raise NotImplementedError
 
     def __str__(self):
-        return "{}: {} -> {}".format(self.__class__.__name__, self.entity, self.target_file)
+        return "{}: {} -> {}".format(
+            self.__class__.__name__, self.entity, self.target_file)
 
     @property
     def source(self):
@@ -94,11 +96,17 @@ class Tactic(object):
         """
         target = self.target_file
         sig = {}
-        if target.exists():
+        if target.exists() and target.isfile():
             sig[self.relpath] = (self.layer_name,
-                                 hashlib.sha256(target.text()).hexdigest())
+                                 self.kind,
+                                 utils.sign(self.target_file))
         return sig
 
+    def verify(self):
+        pass
+
+    def lint(self):
+        pass
 
 
 class CopyTactic(Tactic):
@@ -120,6 +128,8 @@ class CopyTactic(Tactic):
 
 
 class SerializedTactic(Tactic):
+    kind = "dynamic"
+
     def __init__(self, *args, **kwargs):
         super(SerializedTactic, self).__init__(*args, **kwargs)
         self.data = None
@@ -180,7 +190,8 @@ class ComposerYAML(YAMLTactic):
         data = yaml.load(self.entity.open())
         # The split should result in the series/charm path only
         # XXX: there will be strange interactions with cs: vs local:
-        data['inherits'] = ["/".join(self.current.directory.splitall()[-2:])]
+        data['is'] = ["/".join(self.current.directory.splitall()[-2:])]
+        del data['inherits']
         self.dump(data)
 
     @classmethod
@@ -209,6 +220,7 @@ class ConfigYAML(MetadataYAML):
 
 class HookTactic(Tactic):
     """Rule Generated Hooks"""
+
     def __call__(self):
         target = self.target_file
         target.dirname().makedirs_p()
@@ -230,6 +242,7 @@ class HookTactic(Tactic):
             # road.
             # create the wrapper
             # divert the main hook
+            self.kind = "dynamic"
             main.copy2(target.stripext() + "." + self.source_layer)
             self.entity.copy2(target)
             # and write the bash wrapper

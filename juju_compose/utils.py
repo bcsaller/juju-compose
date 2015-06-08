@@ -1,5 +1,6 @@
 import copy
 import collections
+import hashlib
 import json
 import logging
 import os
@@ -301,3 +302,57 @@ def load_class(dpath, workingdir=None):
             raise ImportError("Unable to load class {} at {}".format(
                 classname, dpath))
         return klass
+
+
+def walk(pathobj, fn, matcher=None, kind=None):
+    """walk pathobj calling fn on each matched entry yielding each
+    result. If kind is 'file' or 'dir' only that type ofd entry will
+    be walked. matcher is an optional function returning bool indicating
+    if the entry should be processed.
+    """
+    p = path(pathobj)
+    walker = p.walk
+    if kind == "files":
+        walker = p.walkfiles
+    elif kind == "dir":
+        walker = p.walkdir
+
+    for entry in walker():
+        if matcher and not matcher(entry):
+            continue
+        yield (entry, fn(entry))
+
+
+def sign(pathobj):
+    p = path(pathobj)
+    if not p.isfile():
+        return None
+    return hashlib.sha256(p.text()).hexdigest()
+
+
+def delta_signatures(metadata_filename):
+    md = path(metadata_filename)
+    repo = md.normpath().dirname()
+
+    baseline = json.load(md.open())
+    current = {}
+    for rel, sig in walk(repo, sign):
+        rel = rel.relpath(repo)
+        current[rel] = sig
+    add, change, delete = set(), set(), set()
+
+    for p, s in current.items():
+        fp = repo / p
+        if not fp.isfile():
+            continue
+
+        if p not in baseline:
+            add.add(p)
+            continue
+        # layer, kind, sig
+        if baseline[p][2] != s:
+            change.add(p)
+    for p, d in baseline.items():
+        if p not in current:
+            delete.add(path(p))
+    return add, change, delete

@@ -45,7 +45,8 @@ class TestCompose(unittest.TestCase):
         cyaml = base / "composer.yaml"
         self.assertTrue(cyaml.exists())
         cyaml_data = yaml.load(cyaml.open())
-        self.assertEquals(cyaml_data['inherits'], ['trusty/tester'])
+        #self.assertEquals(cyaml_data['inherits'], ['trusty/mysql'])
+        self.assertEquals(cyaml_data['is'], ['trusty/tester'])
 
         # XXX: verify contents
         self.assertTrue((base / "hooks/config-changed").exists())
