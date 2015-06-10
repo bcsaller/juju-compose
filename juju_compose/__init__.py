@@ -11,6 +11,24 @@ from .config import ComposerConfig
 from bundletester import fetchers
 import utils
 
+
+class RepoFetcher(fetchers.LocalFetcher):
+    @classmethod
+    def can_fetch(cls, url):
+        search_path = [os.getcwd(), os.environ.get("JUJU_REPOSITORY", ".")]
+        cp = os.environ.get("COMPOSER_PATH")
+        if cp:
+            search_path.extend(cp.split(":"))
+
+        for part in search_path:
+            p = (path(part) / url).normpath()
+            if p.exists():
+                return dict(path=p)
+        return {}
+
+fetchers.FETCHERS.insert(0, RepoFetcher)
+
+
 class Charm(object):
     def __init__(self, url, target_repo):
         self.url = url
@@ -153,16 +171,21 @@ class Composer(object):
                     tactic = current
                 output_files[relname] = tactic
         self.plan = [t for t in output_files.values() if t]
+        if self.log_level == "DEBUG":
+            self.dump(charms)
         return self.plan
 
     def exec_plan(self, plan=None):
         if not plan:
             plan = self.plan
         signatures = {}
-        for phase in ['lint', '__call__', 'sign']:
+        for phase in ['lint', 'read', '__call__', 'sign']:
             for tactic in plan:
                 if phase == "lint":
                     tactic.lint()
+                elif phase == "read":
+                    # We use a read (into memory :-/ phase to make inplace simpler)
+                    tactic.read()
                 elif phase == "__call__":
                     tactic()
                 elif phase == "sign":
@@ -171,6 +194,7 @@ class Composer(object):
                         signatures.update(sig)
         # write out the sigs
         sigs = self.target / ".composer.manifest"
+        signatures['.composer.manifest'] = ["composer", 'dynamic', 'unchecked']
         sigs.write_text(json.dumps(signatures, indent=2))
 
     def generate(self):
@@ -180,9 +204,30 @@ class Composer(object):
 
     def validate(self):
         p = self.target_dir / ".composer.manifest"
-        if p.exists():
-            a, c, d = utils.delta_signatures(p)
-            print a, c, d
+        if not p.exists():
+            return
+        a, c, d = utils.delta_signatures(p)
+        for f in a:
+            logging.warn("Added unepxected file, should be in a base layer: %s", f)
+        for f in c:
+            logging.warn("Changed file owned by another layer: %s", f)
+        for f in d:
+            logging.warn("Deleted a file owned by another layer: %s", f)
+        if a or c or d:
+            if self.force:
+                logging.info("Continuing with known changes to target layer.  Changes will be overwritten")
+            else:
+                raise ValueError("Unable to continue due to unexpected modifications")
+
+
+    def dump(self, charms):
+        print "REPO:", self.charm, self.target_dir
+        print "Charms:"
+        for c in charms:
+            print "\t", c
+        print "Plan:"
+        for p in self.plan:
+            print "\t", p
 
     def __call__(self):
         self.find_or_create_repo()

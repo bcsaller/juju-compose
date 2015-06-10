@@ -2,6 +2,7 @@ import logging
 import json
 import yaml
 
+from .path import path
 import utils
 
 
@@ -24,6 +25,7 @@ class Tactic(object):
         self.entity = entity
         self.layers = layers
         self._target = target
+        self._raw_data = None
         self.warnings = []
 
     def __call__(self):
@@ -102,11 +104,11 @@ class Tactic(object):
                                  utils.sign(self.target_file))
         return sig
 
-    def verify(self):
-        pass
-
     def lint(self):
         pass
+
+    def read(self):
+        return None
 
 
 class CopyTactic(Tactic):
@@ -117,7 +119,13 @@ class CopyTactic(Tactic):
         target.dirname().makedirs_p()
         if self.entity.isdir():
             return
-        self.entity.copy2(target)
+        if (self.entity != target) and not target.exists() or not self.entity.samefile(target):
+            data = self.read()
+            if data:
+                target.write_bytes(data)
+                self.entity.copymode(target)
+            else:
+                self.entity.copy2(target)
 
     def __str__(self):
         return "Copy {}".format(self.entity)
@@ -125,6 +133,16 @@ class CopyTactic(Tactic):
     @classmethod
     def trigger(cls, relpath):
         return True
+
+
+class ManifestTactic(Tactic):
+    @classmethod
+    def trigger(cls, relpath):
+        return relpath == ".composer.manifest"
+
+    def __call__(self):
+        # Don't copy manifests, they are regenerated
+        pass
 
 
 class SerializedTactic(Tactic):
@@ -135,6 +153,7 @@ class SerializedTactic(Tactic):
         self.data = None
 
     def combine(self, existing):
+        # Invoke the previous tactic
         existing()
         if existing.data is not None:
             self.data = existing.data.copy()
@@ -185,18 +204,33 @@ class JSONTactic(SerializedTactic):
 
 
 class ComposerYAML(YAMLTactic):
+    def read(self):
+        self._raw_data = self.load(self.entity.open())
+
     def __call__(self):
         # rewrite inherits to be the current source
-        data = yaml.load(self.entity.open())
+        data = self._raw_data
+        if data is None:
+            return
         # The split should result in the series/charm path only
         # XXX: there will be strange interactions with cs: vs local:
         data['is'] = ["/".join(self.current.directory.splitall()[-2:])]
-        del data['inherits']
+        inh = data.get('inherits', [])
+        norm = []
+        for i in inh:
+            if ":" in i:
+                norm.append(i)
+            else:
+                # Attempt to normalize to a repository base
+                norm.append("/".join(path(i).splitall()[-2:]))
+        if norm:
+            data['inherits'] = norm
         self.dump(data)
 
     @classmethod
     def trigger(cls, relpath):
         return relpath == "composer.yaml"
+
 
 
 class MetadataYAML(YAMLTactic):
@@ -248,6 +282,7 @@ def load_tactic(dpath, basedir):
 
 
 DEFAULT_TACTICS = [
+    ManifestTactic,
     MetadataYAML,
     ConfigYAML,
     HookTactic,

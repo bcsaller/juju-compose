@@ -1,0 +1,4 @@
+inherits: ["tests/trusty/a"]
+ignore:
+    - .bzr/*
+    - .git/*

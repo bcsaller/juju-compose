@@ -329,6 +329,9 @@ def sign(pathobj):
         return None
     return hashlib.sha256(p.text()).hexdigest()
 
+IGNORE_LIST=[
+    ".composer.manifest"
+]
 
 def delta_signatures(metadata_filename):
     md = path(metadata_filename)
@@ -350,8 +353,12 @@ def delta_signatures(metadata_filename):
             add.add(p)
             continue
         # layer, kind, sig
+        # don't include items generated only for the last layer
+        if baseline[p][0] == "composer":
+            continue
         if baseline[p][2] != s:
             change.add(p)
+
     for p, d in baseline.items():
         if p not in current:
             delete.add(path(p))
