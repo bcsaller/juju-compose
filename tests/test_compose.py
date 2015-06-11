@@ -90,7 +90,7 @@ class TestCompose(unittest.TestCase):
         self.assertTrue((base / "README.md").exists())
 
         # now regenerate from the target
-        compooser = juju_compose.Composer()
+        composer = juju_compose.Composer()
         composer.log_level = "WARNING"
         composer.output_dir = "out"
         composer.series = "trusty"
