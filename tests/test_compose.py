@@ -45,7 +45,7 @@ class TestCompose(unittest.TestCase):
         cyaml = base / "composer.yaml"
         self.assertTrue(cyaml.exists())
         cyaml_data = yaml.load(cyaml.open())
-        #self.assertEquals(cyaml_data['inherits'], ['trusty/mysql'])
+        self.assertEquals(cyaml_data['inherits'], ['trusty/mysql'])
         self.assertEquals(cyaml_data['is'], ['trusty/tester'])
 
         self.assertTrue((base / "hooks/config-changed").exists())
@@ -75,7 +75,45 @@ class TestCompose(unittest.TestCase):
         # take a generated example where a base layer has changed
         # regenerate in place
         # make some assertions
-        pass
+        composer = juju_compose.Composer()
+        composer.log_level = "WARNING"
+        composer.output_dir = "out"
+        composer.series = "trusty"
+        composer.name = "foo"
+        composer.charm = "tests/trusty/b"
+        composer()
+        base = path('out/trusty/foo')
+        self.assertTrue(base.exists())
+
+        # verify the 1st gen worked
+        self.assertTrue((base / "a").exists())
+        self.assertTrue((base / "README.md").exists())
+
+        # now regenerate from the target
+        compooser = juju_compose.Composer()
+        composer.log_level = "WARNING"
+        composer.output_dir = "out"
+        composer.series = "trusty"
+        # The generate target and source are now the same
+        composer.name = "foo"
+        composer.charm = "out/trusty/foo"
+        composer()
+        base = path('out/trusty/foo')
+        self.assertTrue(base.exists())
+
+        # Check that the generated composer makes sense
+        cy = base / "composer.yaml"
+        config  = yaml.load(cy.open())
+        self.assertEquals(config["inherits"], ["trusty/a"])
+        self.assertEquals(config["is"], ["trusty/foo"])
+
+        # We can even run it more than once
+        composer()
+        cy = base / "composer.yaml"
+        config  = yaml.load(cy.open())
+        self.assertEquals(config["inherits"], ["trusty/a"])
+        self.assertEquals(config["is"], ["trusty/foo"])
+
 
 
 if __name__ == '__main__':

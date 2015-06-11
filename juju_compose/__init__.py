@@ -208,7 +208,7 @@ class Composer(object):
             return
         a, c, d = utils.delta_signatures(p)
         for f in a:
-            logging.warn("Added unepxected file, should be in a base layer: %s", f)
+            logging.warn("Added unexpected file, should be in a base layer: %s", f)
         for f in c:
             logging.warn("Changed file owned by another layer: %s", f)
         for f in d:
