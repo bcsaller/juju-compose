@@ -1,13 +1,18 @@
 from juju_compose.path import path
 import json
 import logging
+import os
 import unittest
 import juju_compose
 import yaml
 
+import pkg_resources
+
 
 class TestCompose(unittest.TestCase):
     def setUp(self):
+        dirname = pkg_resources.resource_filename(__name__, ".")
+        os.environ["COMPOSER_PATH"] = path(dirname)
         path("out").rmtree_p()
 
     def tearDown(self):
@@ -45,7 +50,7 @@ class TestCompose(unittest.TestCase):
         cyaml = base / "composer.yaml"
         self.assertTrue(cyaml.exists())
         cyaml_data = yaml.load(cyaml.open())
-        self.assertEquals(cyaml_data['inherits'], ['trusty/mysql'])
+        self.assertEquals(cyaml_data['includes'], ['trusty/mysql'])
         self.assertEquals(cyaml_data['is'], ['trusty/tester'])
 
         self.assertTrue((base / "hooks/config-changed").exists())
@@ -104,14 +109,14 @@ class TestCompose(unittest.TestCase):
         # Check that the generated composer makes sense
         cy = base / "composer.yaml"
         config  = yaml.load(cy.open())
-        self.assertEquals(config["inherits"], ["trusty/a"])
+        self.assertEquals(config["includes"], ["trusty/a"])
         self.assertEquals(config["is"], ["trusty/foo"])
 
         # We can even run it more than once
         composer()
         cy = base / "composer.yaml"
         config  = yaml.load(cy.open())
-        self.assertEquals(config["inherits"], ["trusty/a"])
+        self.assertEquals(config["includes"], ["trusty/a"])
         self.assertEquals(config["is"], ["trusty/foo"])
 
 

@@ -19,7 +19,6 @@ class RepoFetcher(fetchers.LocalFetcher):
         cp = os.environ.get("COMPOSER_PATH")
         if cp:
             search_path.extend(cp.split(":"))
-
         for part in search_path:
             p = (path(part) / url).normpath()
             if p.exists():
@@ -27,6 +26,40 @@ class RepoFetcher(fetchers.LocalFetcher):
         return {}
 
 fetchers.FETCHERS.insert(0, RepoFetcher)
+
+class InterfaceFetcher(fetchers.Fetcher):
+    @classmethod
+    def can_fetch(cls, url):
+        # XXX: local interfaces?
+        if url.startswith("interface:"):
+            p = url[10:]
+            return dict(path=p)
+        return {}
+
+    def fetch(self, dir_):
+        # We need to fetch to repo.deps and then map the proper endpoint code
+        # into the charm based on metadata (which will have to be the final metadtap)
+        # resolve the interface uri from a known http endpoint
+        pass
+
+fetchers.FETCHERS.insert(0, InterfaceFetcher)
+
+class Interface(object):
+    def __init__(self, url, target_repo):
+        self.url = url
+        self.target_repo = target_repo
+        self.directory = None
+
+    def __repr__(self):
+        return "<Interface {}:{}>".format(self.url, self.directory)
+
+    def fetch(self):
+        pass
+
+    def install(self, kind, name):
+        """Kind is provides, requires or peer, name is the name in the charm"""
+        pass
+
 
 
 class Charm(object):
@@ -92,7 +125,7 @@ class Composer(object):
         # Generated output will go into this directory
         base = path(self.output_dir)
         self.repo = (base / self.series).makedirs_p()
-        # And anything it inherits from will be placed here
+        # And anything it includes from will be placed here
         # outside the series
         self.deps = (base / "deps" / self.series).makedirs_p()
         self.target_dir = (self.repo / self.name).mkdir_p()
@@ -122,19 +155,19 @@ class Composer(object):
         return self.fetch_deps(charm)
 
     def fetch_deps(self, charm):
-        results = []
+        results = {"charms": [], "interfaces": []}
         self.fetch_dep(charm, results)
         # results should now be a bottom up list
         # of deps. Using the in order results traversal
         # we can build out our plan for each file in the
         # output charm
-        results.append(charm)
+        results["charms"].append(charm)
         return results
 
     def fetch_dep(self, charm, results):
         # Recursively fetch and scan charms
         # This returns a plan for each file in the result
-        basecharms = charm.config.get('inherits')
+        basecharms = charm.config.get('includes', [])
         if not basecharms:
             # no deps, this is possible for any base
             # but questionable for the target
@@ -144,35 +177,59 @@ class Composer(object):
             basecharms = [basecharms]
 
         for base in basecharms:
-            base_charm = Charm(base, self.deps).fetch()
-            self.fetch_dep(base_charm, results)
-            results.append(base_charm)
+            if base.startswith("interface:"):
+                iface = Interface(base, self.deps).fetch()
+                results["interfaces"].append(iface)
+            else:
+                base_charm = Charm(base, self.deps).fetch()
+                self.fetch_dep(base_charm, results)
+                results["charms"].append(base_charm)
 
-    def formulate_plan(self, charms):
+    def build_tactics(self, entry, charm, layers, index, output_files):
+        # Delegate to the config object, it's rules
+        # will produce a tactic
+        relname = entry.relpath(charm.directory)
+        current = charm.config.tactic(entry, layers, index, self.target)
+        existing = output_files.get(relname)
+        if existing is not None:
+            tactic = current.combine(existing)
+        else:
+            tactic = current
+        print entry, relname, tactic
+        output_files[relname] = tactic
+
+    def formulate_plan(self, layers):
         """Build out a plan for each file in the various composed
         layers, taking into account config at each layer"""
         output_files = OrderedDict()
-        for i, charm in enumerate(charms):
+        for i, charm in enumerate(layers["charms"]):
             logging.info("Processing charm layer: %s", charm.directory.name)
             # walk the charm, consulting the config
             # and creating an entry
             # later charms in the list might modify
             # the contributions of charms before it
-            # (as they act as baseclasses)
-            for entry in charm.directory.walk():
-                # Delegate to the config object, it's rules
-                # will produce a tactic
-                relname = entry.relpath(charm.directory)
-                current = charm.config.tactic(entry, charms, i, self.target)
-                existing = output_files.get(relname)
-                if existing is not None:
-                    tactic = current.combine(existing)
-                else:
-                    tactic = current
-                output_files[relname] = tactic
+            # (as they act as basec``lasses)
+            # actually invoke it
+            list(utils.walk(charm.directory,
+                       self.build_tactics,
+                       charm=charm,
+                       layers=layers["charms"],
+                       index=i,
+                       output_files=output_files))
         self.plan = [t for t in output_files.values() if t]
+
+        # Interface includes don't directly map to output files
+        # as they are computed in combination with the metadata.yaml
+        charm_meta = output_files.get("metadata.yaml")
+        if charm_meta:
+            for iface in layers["interfaces"]:
+                iface_tactics = iface.config.tactic(iface, charm_meta, self.target)
+                self.plan.extend(iface_tactics)
+        elif not charm_meta and layers["interfaces"]:
+            raise ValueError("Includes interfaces but no metadata.yaml to bind them")
+
         if self.log_level == "DEBUG":
-            self.dump(charms)
+            self.dump(layers)
         return self.plan
 
     def exec_plan(self, plan=None):
@@ -198,8 +255,8 @@ class Composer(object):
         sigs.write_text(json.dumps(signatures, indent=2))
 
     def generate(self):
-        results = self.fetch()
-        self.formulate_plan(results)
+        layers = self.fetch()
+        self.formulate_plan(layers)
         self.exec_plan()
 
     def validate(self):
@@ -220,11 +277,14 @@ class Composer(object):
                 raise ValueError("Unable to continue due to unexpected modifications")
 
 
-    def dump(self, charms):
+    def dump(self, layers):
         print "REPO:", self.charm, self.target_dir
-        print "Charms:"
-        for c in charms:
-            print "\t", c
+        print "Layers:"
+        for l in layers["charms"]:
+            print "\t", l
+        print "Interfaces:"
+        for i in layers["interfaces"]:
+            print "\t", i
         print "Plan:"
         for p in self.plan:
             print "\t", p

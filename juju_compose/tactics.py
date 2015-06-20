@@ -208,23 +208,23 @@ class ComposerYAML(YAMLTactic):
         self._raw_data = self.load(self.entity.open())
 
     def __call__(self):
-        # rewrite inherits to be the current source
+        # rewrite includes to be the current source
         data = self._raw_data
         if data is None:
             return
         # The split should result in the series/charm path only
         # XXX: there will be strange interactions with cs: vs local:
         data['is'] = ["/".join(self.current.directory.splitall()[-2:])]
-        inh = data.get('inherits', [])
+        inc = data.get('includes', [])
         norm = []
-        for i in inh:
+        for i in inc:
             if ":" in i:
                 norm.append(i)
             else:
                 # Attempt to normalize to a repository base
                 norm.append("/".join(path(i).splitall()[-2:]))
         if norm:
-            data['inherits'] = norm
+            data['includes'] = norm
         self.dump(data)
 
     @classmethod

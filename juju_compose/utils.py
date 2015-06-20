@@ -304,7 +304,7 @@ def load_class(dpath, workingdir=None):
         return klass
 
 
-def walk(pathobj, fn, matcher=None, kind=None):
+def walk(pathobj, fn, matcher=None, kind=None, **kwargs):
     """walk pathobj calling fn on each matched entry yielding each
     result. If kind is 'file' or 'dir' only that type ofd entry will
     be walked. matcher is an optional function returning bool indicating
@@ -320,7 +320,7 @@ def walk(pathobj, fn, matcher=None, kind=None):
     for entry in walker():
         if matcher and not matcher(entry):
             continue
-        yield (entry, fn(entry))
+        yield (entry, fn(entry, **kwargs))
 
 
 def sign(pathobj):

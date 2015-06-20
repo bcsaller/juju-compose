@@ -1,4 +1,4 @@
-inherits: ["tests/trusty/mysql"]
+includes: ["tests/trusty/mysql"]
 ignore:
     - .bzr/*
     - .git/*

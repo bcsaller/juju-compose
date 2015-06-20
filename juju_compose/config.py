@@ -7,7 +7,7 @@ import yaml
 
 class ComposerConfig(dict):
     """Defaults for controlling the generator, each layer in
-    the inheritance graph can provide values, including things
+    the inclusion graph can provide values, including things
     like overrides, or warnings if things are overridden that
     shouldn't be.
     """
