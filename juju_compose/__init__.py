@@ -7,7 +7,7 @@ import os
 
 from collections import OrderedDict
 from .path import path
-from .config import ComposerConfig
+from .config import ComposerConfig, InterfaceConfig
 from bundletester import fetchers
 import utils
 
@@ -30,10 +30,22 @@ fetchers.FETCHERS.insert(0, RepoFetcher)
 class InterfaceFetcher(fetchers.Fetcher):
     @classmethod
     def can_fetch(cls, url):
-        # XXX: local interfaces?
+        # Search local path first, then
+        # the interface webservice
         if url.startswith("interface:"):
             p = url[10:]
-            return dict(path=p)
+            search_path = [path(os.getcwd()) / "interfaces",
+                           os.environ.get("JUJU_REPOSITORY", ".")]
+            cp = os.environ.get("INTERFACE_PATH")
+            if cp:
+                search_path.extend(cp.split(":"))
+            for part in search_path:
+                p = (path(part) / url).normpath()
+                if p.exists():
+                    return dict(path=p)
+
+            #XXX: Attempt to use the WS
+            pass
         return {}
 
     def fetch(self, dir_):
@@ -44,8 +56,34 @@ class InterfaceFetcher(fetchers.Fetcher):
 
 fetchers.FETCHERS.insert(0, InterfaceFetcher)
 
-class Interface(object):
+class Configable(object):
+    CONFIG_FILE = None
+    CONFIG_KLASS = None
+
+    def __init__(self):
+        self._config = self.CONFIG_KLASS()
+        self.config_file = None
+
+    @property
+    def config(self):
+        if self._config.configured():
+            return self._config
+        if self.config_file and self.config_file.exists():
+            self._config.configure(self.config_file)
+        return self._config
+
+    @property
+    def configured(self):
+        return bool(self.config is not None and self.config.configured())
+
+
+
+class Interface(Configable):
+    CONFIG_FILE = "interface.yaml"
+    CONFIG_KLASS = InterfaceConfig
+
     def __init__(self, url, target_repo):
+        super(Interface, self).__init__()
         self.url = url
         self.target_repo = target_repo
         self.directory = None
@@ -54,7 +92,20 @@ class Interface(object):
         return "<Interface {}:{}>".format(self.url, self.directory)
 
     def fetch(self):
-        pass
+        try:
+            fetcher = fetchers.get_fetcher(self.url)
+        except fetchers.FetchError:
+            # We might be passing a local dir path directly
+            # which fetchers don't currently  support
+            self.directory = path(self.url)
+        else:
+            if isinstance(fetcher, fetchers.LocalFetcher):
+                self.directory = path(fetcher.path)
+            else:
+                self.directory = path(fetcher.fetch(self.target_repo))
+
+        self.config_file = self.directory / self.CONFIG_FILE
+        return self
 
     def install(self, kind, name):
         """Kind is provides, requires or peer, name is the name in the charm"""
@@ -62,16 +113,18 @@ class Interface(object):
 
 
 
-class Charm(object):
+class Layer(Configable):
+    CONFIG_FILE = "composer.yaml"
+    CONFIG_KLASS = ComposerConfig
+
     def __init__(self, url, target_repo):
+        super(Layer, self).__init__()
         self.url = url
         self.target_repo = target_repo
         self.directory = None
-        self._config = ComposerConfig()
-        self.config_file = None
 
     def __repr__(self):
-        return "<Charm {}:{}>".format(self.url, self.directory)
+        return "<Layer {}:{}>".format(self.url, self.directory)
 
     def __div__(self, other):
         return self.directory / other
@@ -89,24 +142,8 @@ class Charm(object):
             else:
                 self.directory = path(fetcher.fetch(self.target_repo))
 
-        metadata = self.directory / "metadata.yaml"
-        if not metadata.exists():
-            logging.warn("{} has no metadata.yaml, is it a charm".format(
-                self.url))
-        self.config_file = self.directory / "composer.yaml"
+        self.config_file = self.directory / self.CONFIG_FILE
         return self
-
-    @property
-    def config(self):
-        if self._config.configured():
-            return self._config
-        if self.config_file and self.config_file.exists():
-            self._config.configure(self.config_file)
-        return self._config
-
-    @property
-    def configured(self):
-        return bool(self.config is not None and self.config.configured())
 
 
 class Composer(object):
@@ -145,77 +182,81 @@ class Composer(object):
 
 
     def fetch(self):
-        charm = Charm(self.charm, self.deps).fetch()
-        if not charm.configured:
-            raise ValueError("The top level charm needs a "
+        layer = Layer(self.charm, self.deps).fetch()
+        if not layer.configured:
+            raise ValueError("The top level layer needs a "
                              "valid composer.yaml file")
-        # Manually create a charm object for the output
-        self.target = Charm(self.name, self.repo)
+        # Manually create a layer object for the output
+        self.target = Layer(self.name, self.repo)
         self.target.directory = self.target_dir
-        return self.fetch_deps(charm)
+        return self.fetch_deps(layer)
 
-    def fetch_deps(self, charm):
-        results = {"charms": [], "interfaces": []}
-        self.fetch_dep(charm, results)
+    def fetch_deps(self, layer):
+        results = {"layers": [], "interfaces": []}
+        self.fetch_dep(layer, results)
         # results should now be a bottom up list
         # of deps. Using the in order results traversal
         # we can build out our plan for each file in the
-        # output charm
-        results["charms"].append(charm)
+        # output layer
+        results["layers"].append(layer)
         return results
 
-    def fetch_dep(self, charm, results):
-        # Recursively fetch and scan charms
+    def fetch_dep(self, layer, results):
+        # Recursively fetch and scan layers
         # This returns a plan for each file in the result
-        basecharms = charm.config.get('includes', [])
-        if not basecharms:
+        baselayers = layer.config.get('includes', [])
+        if not baselayers:
             # no deps, this is possible for any base
             # but questionable for the target
             return
 
-        if isinstance(basecharms, str):
-            basecharms = [basecharms]
+        if isinstance(baselayers, str):
+            baselayers = [baselayers]
 
-        for base in basecharms:
+        for base in baselayers:
             if base.startswith("interface:"):
                 iface = Interface(base, self.deps).fetch()
+                print "prep", iface
                 results["interfaces"].append(iface)
             else:
-                base_charm = Charm(base, self.deps).fetch()
-                self.fetch_dep(base_charm, results)
-                results["charms"].append(base_charm)
+                base_layer = Layer(base, self.deps).fetch()
+                self.fetch_dep(base_layer, results)
+                results["layers"].append(base_layer)
 
-    def build_tactics(self, entry, charm, layers, index, output_files):
+    def build_tactics(self, entry, current, config, output_files):
         # Delegate to the config object, it's rules
         # will produce a tactic
-        relname = entry.relpath(charm.directory)
-        current = charm.config.tactic(entry, layers, index, self.target)
+        relname = entry.relpath(current.directory)
+        current = current.config.tactic(entry, current, self.target, config)
         existing = output_files.get(relname)
         if existing is not None:
             tactic = current.combine(existing)
         else:
             tactic = current
-        print entry, relname, tactic
         output_files[relname] = tactic
 
     def formulate_plan(self, layers):
         """Build out a plan for each file in the various composed
         layers, taking into account config at each layer"""
         output_files = OrderedDict()
-        for i, charm in enumerate(layers["charms"]):
-            logging.info("Processing charm layer: %s", charm.directory.name)
-            # walk the charm, consulting the config
+        for i, layer in enumerate(layers["layers"]):
+            logging.info("Processing layer: %s", layer.directory.name)
+            # walk the layer, consulting the config
             # and creating an entry
-            # later charms in the list might modify
-            # the contributions of charms before it
+            # later layers in the list might modify
+            # the contributions of layers before it
             # (as they act as basec``lasses)
             # actually invoke it
-            list(utils.walk(charm.directory,
+            if i + 1 < len(layers["layers"]):
+                config = layers["layers"][i + 1].config
+            else:
+                config = None
+            for e in utils.walk(layer.directory,
                        self.build_tactics,
-                       charm=charm,
-                       layers=layers["charms"],
-                       index=i,
-                       output_files=output_files))
+                       current=layer,
+                       config=config,
+                       output_files=output_files):
+                pass
         self.plan = [t for t in output_files.values() if t]
 
         # Interface includes don't directly map to output files
@@ -223,8 +264,13 @@ class Composer(object):
         charm_meta = output_files.get("metadata.yaml")
         if charm_meta:
             for iface in layers["interfaces"]:
-                iface_tactics = iface.config.tactic(iface, charm_meta, self.target)
-                self.plan.extend(iface_tactics)
+                # XXX: iterate the metadata.yaml file looking for intersections
+                # map the interface repo under hooks/relations/<interface>
+                # and link back using the names in metadata.yaml as <hooks>
+                iface_tactics = iface.config.tactic(iface, charm_meta,
+                                                    [iface, layers["layers"][-1]],
+                                                    self.target)
+                self.plan.extend(list(iface_tactics))
         elif not charm_meta and layers["interfaces"]:
             raise ValueError("Includes interfaces but no metadata.yaml to bind them")
 
@@ -280,7 +326,7 @@ class Composer(object):
     def dump(self, layers):
         print "REPO:", self.charm, self.target_dir
         print "Layers:"
-        for l in layers["charms"]:
+        for l in layers["layers"]:
             print "\t", l
         print "Interfaces:"
         for i in layers["interfaces"]:

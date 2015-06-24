@@ -20,12 +20,12 @@ class Tactic(object):
     """
     kind = "static"  # used in signatures
 
-    def __init__(self, entity, layers, index, target):
-        self.index = index
+    def __init__(self, entity, current, target, config):
         self.entity = entity
-        self.layers = layers
+        self._current = current
         self._target = target
         self._raw_data = None
+        self._config = config
         self.warnings = []
 
     def __call__(self):
@@ -36,18 +36,13 @@ class Tactic(object):
             self.__class__.__name__, self.entity, self.target_file)
 
     @property
-    def source(self):
-        """The file in the bottom most layer being processed"""
-        return self.layers[max(self.index - 1, 0)]
-
-    @property
     def current(self):
         """The file in the current layer under consideration"""
-        return self.layers[self.index]
+        return self._current
 
     @property
     def target(self):
-        """The output file path()"""
+        """The target (final) layer."""
         return self._target
 
     @property
@@ -64,23 +59,10 @@ class Tactic(object):
         return self.current.directory.name
 
     @property
-    def source_layer(self):
-        return self.source.directory.name
-
-    def find(self, name):
-        for layer in reversed(self.layers[:self.index]):
-            f = layer.directory / name
-            if f.exists():
-                return f
-        return None
-
-    @property
     def config(self):
         # Return the config of the layer *above* you
         # as that is the one that controls your compositing
-        if self.index + 1 < len(self.layers):
-            return self.layers[self.index + 1].config
-        return None
+        return self._config
 
     def combine(self, existing):
         """Produce a tactic informed by the last tactic for an entry.

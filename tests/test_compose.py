@@ -13,6 +13,7 @@ class TestCompose(unittest.TestCase):
     def setUp(self):
         dirname = pkg_resources.resource_filename(__name__, ".")
         os.environ["COMPOSER_PATH"] = path(dirname)
+        os.environ["INTERFACE_PATH"] = path(dirname) / "interfaces"
         path("out").rmtree_p()
 
     def tearDown(self):

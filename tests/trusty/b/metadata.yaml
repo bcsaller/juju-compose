@@ -5,7 +5,7 @@ description: |
     Test layer b
 categories:
     - app
-provides:
-  storage:
-    interface: storage
-    scope: container
+requires:
+  mysql:
+    interface: mysql
+
