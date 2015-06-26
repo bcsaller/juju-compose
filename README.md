@@ -34,12 +34,14 @@ It should be enough to give you an idea how it works. In order for this example
 to run you'll need to pip install bundletester as it shares some code with that
 project.
 
+This currently allows for two new ENV variables when run
+    COMPOSER_PATH:  a ':' separated list of JUJU_REPOSITORIES that should be searched for includes
+    INTERFACE_PATH: a ':' separated list of paths to resolve interface:_name_ includes from.
+
 
 TODO:
 - lint about methods in base layer not provided/extended in lower
 layers
-- support for loading interface stubs
-- Pluggable directives
 
 
 
