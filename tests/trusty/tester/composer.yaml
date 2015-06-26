@@ -1,7 +1,4 @@
 includes: ["tests/trusty/mysql"]
-ignore:
-    - .bzr/*
-    - .git/*
 config:
     deletes:
         - vip

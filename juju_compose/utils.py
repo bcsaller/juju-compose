@@ -8,6 +8,7 @@ import subprocess
 import time
 from contextlib import contextmanager
 
+import pathspec
 from .path import path
 
 log = logging.getLogger('utils')
@@ -318,9 +319,18 @@ def walk(pathobj, fn, matcher=None, kind=None, **kwargs):
         walker = p.walkdir
 
     for entry in walker():
-        if matcher and not matcher(entry):
+        relpath = entry.relpath(pathobj)
+        if matcher and not matcher(relpath):
             continue
         yield (entry, fn(entry, **kwargs))
+
+
+def ignore_matcher(ignores=[]):
+    spec = pathspec.PathSpec.from_lines(pathspec.GitIgnorePattern, ignores)
+
+    def matcher(entity):
+        return entity not in spec.match_files((entity,))
+    return matcher
 
 
 def sign(pathobj):
@@ -329,9 +339,6 @@ def sign(pathobj):
         return None
     return hashlib.sha256(p.text()).hexdigest()
 
-IGNORE_LIST=[
-    ".composer.manifest"
-]
 
 def delta_signatures(metadata_filename):
     md = path(metadata_filename)

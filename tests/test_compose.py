@@ -109,16 +109,30 @@ class TestCompose(unittest.TestCase):
 
         # Check that the generated composer makes sense
         cy = base / "composer.yaml"
-        config  = yaml.load(cy.open())
+        config = yaml.load(cy.open())
         self.assertEquals(config["includes"], ["trusty/a", "interface:mysql"])
         self.assertEquals(config["is"], ["trusty/foo"])
 
         # We can even run it more than once
         composer()
         cy = base / "composer.yaml"
-        config  = yaml.load(cy.open())
+        config = yaml.load(cy.open())
         self.assertEquals(config["includes"], ["trusty/a", "interface:mysql"])
         self.assertEquals(config["is"], ["trusty/foo"])
+
+        # We included an interface, we should be able to assert things about it
+        # in its final form as well
+        provides = base / "hooks/relations/mysql/provides.py"
+        requires = base / "hooks/relations/mysql/requires.py"
+        self.assertTrue(provides.exists())
+        self.assertTrue(requires.exists())
+
+        # and that we generated the hooks themselves
+        for kind in ["joined", "changed", "broken", "departed"]:
+            self.assertTrue((base / "hooks" /
+                             "mysql-relation-{}".format(kind)).exists())
+
+
 
 
 

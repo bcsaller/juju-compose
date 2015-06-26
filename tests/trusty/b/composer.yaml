@@ -1,4 +1,1 @@
 includes: ["trusty/a", "interface:mysql"]
-ignore:
-    - .bzr/*
-    - .git/*

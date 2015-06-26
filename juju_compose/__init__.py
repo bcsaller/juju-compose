@@ -8,7 +8,7 @@ import os
 from collections import OrderedDict
 from .path import path
 import tactics
-from .config import ComposerConfig, InterfaceConfig
+from .config import ComposerConfig
 from bundletester import fetchers
 import utils
 
@@ -77,7 +77,7 @@ class Configable(object):
 
 class Interface(Configable):
     CONFIG_FILE = "interface.yaml"
-    CONFIG_KLASS = InterfaceConfig
+    CONFIG_KLASS = ComposerConfig
 
     def __init__(self, url, target_repo):
         super(Interface, self).__init__()
@@ -219,7 +219,6 @@ class Composer(object):
         for base in baselayers:
             if base.startswith("interface:"):
                 iface = Interface(base, self.deps).fetch()
-                print "prep", iface
                 results["interfaces"].append(iface)
             else:
                 base_layer = Layer(base, self.deps).fetch()
@@ -251,12 +250,11 @@ class Composer(object):
                 config = layers["layers"][i + 1].config
             else:
                 config = None
-            for e in utils.walk(layer.directory,
-                                self.build_tactics,
-                                current=layer,
-                                config=config,
-                                output_files=output_files):
-                pass
+            list(e for e in utils.walk(layer.directory,
+                                   self.build_tactics,
+                                   current=layer,
+                                   config=config,
+                                   output_files=output_files))
         plan = [t for t in output_files.values() if t]
         return plan
 

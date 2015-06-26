@@ -124,17 +124,29 @@ class InterfaceCopy(Tactic):
         self._target = target
         self._config = config
 
+    @property
+    def target(self):
+        return self._target / "hooks/relations" / self.interface.name
+
     def __call__(self):
         # copy the entire tree into the
         # hooks/relations/<interface>
         # directory
-        target = self.target / "hooks/relations" / self.interface.name
-        logging.debug("Copying Interface %s: %s", self.interface.name, target)
+        logging.debug("Copying Interface %s: %s", self.interface.name, self.target)
         # Ensure the path exists
-        if target.exists():
+        if self.target.exists():
             # XXX: fix this to do actual updates
             return
-        self.interface.directory.copytree(target)
+        ignorer = utils.ignore_matcher(self.config.ignores)
+        for entity, _ in utils.walk(self.interface.directory,
+                                    lambda x: True,
+                                    matcher=ignorer,
+                                    kind="files"):
+            target = entity.relpath(self.interface.directory)
+            target = (self.target / target).normpath()
+            if target.parent and not target.parent.exists():
+                target.parent.makedirs_p()
+            entity.copy2(target)
 
     def __str__(self):
         return "Copy Interface {}".format(self.interface.name)
@@ -143,8 +155,10 @@ class InterfaceCopy(Tactic):
         """return sign in the form {relpath: (origin layer, SHA256)}
         """
         sigs = {}
-        for entry, sig in utils.walk(self.interface.directory, utils.sign, kind="files"):
-            sigs[entry] = (self.interface.url, "static", sig)
+        for entry, sig in utils.walk(self.target,
+                                     utils.sign, kind="files"):
+            relpath = entry.relpath(self._target.directory)
+            sigs[relpath] = (self.interface.url, "static", sig)
         return sigs
 
 
@@ -164,13 +178,31 @@ main('{}')
 
     def __call__(self):
         for hook in ['joined', 'changed', 'broken', 'departed']:
-            target = self.target / "hooks" / "{}-relation-{}".format(
+            target = self._target / "hooks" / "{}-relation-{}".format(
                 self.relation_name, hook)
+            if target.exists():
+                # XXX: warn
+                continue
+            if not target.parent.exists():
+                target.parent.makedirs_p()
             target.write_text(self.DEFAULT_BINDING.format(self.relation_name))
             target.chmod(0755)
 
+    def sign(self):
+        """return sign in the form {relpath: (origin layer, SHA256)}
+        """
+        sigs = {}
+        for hook in ['joined', 'changed', 'broken', 'departed']:
+            target = self._target / "hooks" / "{}-relation-{}".format(
+                self.relation_name, hook)
+            rel = target.relpath(self._target.directory)
+            sigs[rel] = (self.interface.url,
+                            "dynamic",
+                            utils.sign(target))
+        return sigs
+
     def __str__(self):
-        return "BInd Interface {}".format(self.interface.name)
+        return "Bind Interface {}".format(self.interface.name)
 
 
 
