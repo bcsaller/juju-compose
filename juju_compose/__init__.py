@@ -89,7 +89,6 @@ class Interface(Configable):
 
     @property
     def name(self):
-        # XXX: return only the name portion as it appears in metadata.yaml
         if self.url.startswith("interface:"):
             return self.url[10:]
         return self.url
@@ -285,9 +284,6 @@ class Composer(object):
                     used_interfaces.add(v["interface"])
 
             for iface in layers["interfaces"]:
-                # XXX: iterate the metadata.yaml file looking for intersections
-                # map the interface repo under hooks/relations/<interface>
-                # and link back using the names in metadata.yaml as <hooks>
                 if iface.name not in used_interfaces:
                     # we shouldn't include something the charm doesn't use
                     continue
