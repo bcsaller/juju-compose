@@ -98,17 +98,10 @@ class InterfaceConfig(dict):
         # XXX: combine from config layer
         return self._tactics + DEFAULT_TACTICS[:]
 
-    def tactic(self, entity, charm_meta, current, target, next_config):
+    def tactic(self, iface, relation_name, target, next_config):
         """Interfaces produce tactics using the metadata.yaml
         and their interface repo"""
-        bd = current.directory
-
-        if next_config:
-            ignores = next_config.get('ignore')
-            if ignores:
-                for ignore in ignores:
-                    if fnmatch.fnmatch(entity.relpath(bd), ignore):
-                        return None
+        bd = iface.directory
 
         for tactic in self.tactics():
             if tactic.trigger(entity.relpath(bd)):

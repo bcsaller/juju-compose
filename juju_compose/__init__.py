@@ -7,6 +7,7 @@ import os
 
 from collections import OrderedDict
 from .path import path
+import tactics
 from .config import ComposerConfig, InterfaceConfig
 from bundletester import fetchers
 import utils
@@ -27,34 +28,31 @@ class RepoFetcher(fetchers.LocalFetcher):
 
 fetchers.FETCHERS.insert(0, RepoFetcher)
 
-class InterfaceFetcher(fetchers.Fetcher):
+
+class InterfaceFetcher(fetchers.LocalFetcher):
     @classmethod
     def can_fetch(cls, url):
         # Search local path first, then
         # the interface webservice
         if url.startswith("interface:"):
-            p = url[10:]
+            url = url[10:]
             search_path = [path(os.getcwd()) / "interfaces",
                            os.environ.get("JUJU_REPOSITORY", ".")]
             cp = os.environ.get("INTERFACE_PATH")
             if cp:
-                search_path.extend(cp.split(":"))
+                search_path.extend(cp.split(os.pathsep))
             for part in search_path:
                 p = (path(part) / url).normpath()
                 if p.exists():
                     return dict(path=p)
 
-            #XXX: Attempt to use the WS
+            # XXX: Attempt to use the WS
             pass
         return {}
 
-    def fetch(self, dir_):
-        # We need to fetch to repo.deps and then map the proper endpoint code
-        # into the charm based on metadata (which will have to be the final metadtap)
-        # resolve the interface uri from a known http endpoint
-        pass
 
 fetchers.FETCHERS.insert(0, InterfaceFetcher)
+
 
 class Configable(object):
     CONFIG_FILE = None
@@ -77,7 +75,6 @@ class Configable(object):
         return bool(self.config is not None and self.config.configured())
 
 
-
 class Interface(Configable):
     CONFIG_FILE = "interface.yaml"
     CONFIG_KLASS = InterfaceConfig
@@ -90,6 +87,13 @@ class Interface(Configable):
 
     def __repr__(self):
         return "<Interface {}:{}>".format(self.url, self.directory)
+
+    @property
+    def name(self):
+        # XXX: return only the name portion as it appears in metadata.yaml
+        if self.url.startswith("interface:"):
+            return self.url[10:]
+        return self.url
 
     def fetch(self):
         try:
@@ -110,7 +114,6 @@ class Interface(Configable):
     def install(self, kind, name):
         """Kind is provides, requires or peer, name is the name in the charm"""
         pass
-
 
 
 class Layer(Configable):
@@ -152,6 +155,7 @@ class Composer(object):
     """
     def __init__(self):
         self.config = ComposerConfig()
+        self.force = False
 
     def configure(self, config_file):
         self.charm = path(self.charm)
@@ -179,7 +183,6 @@ class Composer(object):
                 self.target_dir = self.output_dir
                 return
         self.create_repo()
-
 
     def fetch(self):
         layer = Layer(self.charm, self.deps).fetch()
@@ -235,10 +238,7 @@ class Composer(object):
             tactic = current
         output_files[relname] = tactic
 
-    def formulate_plan(self, layers):
-        """Build out a plan for each file in the various composed
-        layers, taking into account config at each layer"""
-        output_files = OrderedDict()
+    def plan_layers(self, layers, output_files):
         for i, layer in enumerate(layers["layers"]):
             logging.info("Processing layer: %s", layer.directory.name)
             # walk the layer, consulting the config
@@ -252,28 +252,56 @@ class Composer(object):
             else:
                 config = None
             for e in utils.walk(layer.directory,
-                       self.build_tactics,
-                       current=layer,
-                       config=config,
-                       output_files=output_files):
+                                self.build_tactics,
+                                current=layer,
+                                config=config,
+                                output_files=output_files):
                 pass
-        self.plan = [t for t in output_files.values() if t]
+        plan = [t for t in output_files.values() if t]
+        return plan
 
+    def plan_interfaces(self, layers, output_files, plan):
         # Interface includes don't directly map to output files
         # as they are computed in combination with the metadata.yaml
         charm_meta = output_files.get("metadata.yaml")
         if charm_meta:
+            meta = charm_meta()
+            target_config = layers["layers"][-1].config
+            specs = []
+            used_interfaces = set()
+            for kind in ("provides", "requires", "peer"):
+                for k, v in meta.get(kind, {}).items():
+                    # ex: ["provides", "db", "mysql"]
+                    specs.append([kind, k, v["interface"]])
+                    used_interfaces.add(v["interface"])
+
             for iface in layers["interfaces"]:
                 # XXX: iterate the metadata.yaml file looking for intersections
                 # map the interface repo under hooks/relations/<interface>
                 # and link back using the names in metadata.yaml as <hooks>
-                iface_tactics = iface.config.tactic(iface, charm_meta,
-                                                    [iface, layers["layers"][-1]],
-                                                    self.target)
-                self.plan.extend(list(iface_tactics))
+                if iface.name not in used_interfaces:
+                    # we shouldn't include something the charm doesn't use
+                    continue
+                for kind, relation_name, interface_name in specs:
+                    # COPY phase
+                    plan.append(
+                        tactics.InterfaceCopy(iface, relation_name,
+                                              self.target, target_config)
+                    )
+                    # Link Phase
+                    plan.append(
+                        tactics.InterfaceBind(iface, relation_name, kind,
+                                              self.target, target_config))
         elif not charm_meta and layers["interfaces"]:
-            raise ValueError("Includes interfaces but no metadata.yaml to bind them")
+            raise ValueError(
+                "Includes interfaces but no metadata.yaml to bind them")
 
+    def formulate_plan(self, layers):
+        """Build out a plan for each file in the various composed
+        layers, taking into account config at each layer"""
+        output_files = OrderedDict()
+        self.plan = self.plan_layers(layers, output_files)
+        self.plan_interfaces(layers, output_files, self.plan)
         if self.log_level == "DEBUG":
             self.dump(layers)
         return self.plan
@@ -287,7 +315,8 @@ class Composer(object):
                 if phase == "lint":
                     tactic.lint()
                 elif phase == "read":
-                    # We use a read (into memory :-/ phase to make inplace simpler)
+                    # We use a read (into memory phase to make layer comps
+                    # simpler)
                     tactic.read()
                 elif phase == "__call__":
                     tactic()
@@ -311,17 +340,22 @@ class Composer(object):
             return
         a, c, d = utils.delta_signatures(p)
         for f in a:
-            logging.warn("Added unexpected file, should be in a base layer: %s", f)
+            logging.warn(
+                "Added unexpected file, should be in a base layer: %s", f)
         for f in c:
-            logging.warn("Changed file owned by another layer: %s", f)
+            logging.warn(
+                "Changed file owned by another layer: %s", f)
         for f in d:
-            logging.warn("Deleted a file owned by another layer: %s", f)
+            logging.warn(
+                "Deleted a file owned by another layer: %s", f)
         if a or c or d:
-            if self.force:
-                logging.info("Continuing with known changes to target layer.  Changes will be overwritten")
+            if self.force is False:
+                logging.info(
+                    "Continuing with known changes to target layer. "
+                    "Changes will be overwritten")
             else:
-                raise ValueError("Unable to continue due to unexpected modifications")
-
+                raise ValueError(
+                    "Unable to continue due to unexpected modifications")
 
     def dump(self, layers):
         print "REPO:", self.charm, self.target_dir

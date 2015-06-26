@@ -117,6 +117,63 @@ class CopyTactic(Tactic):
         return True
 
 
+class InterfaceCopy(Tactic):
+    def __init__(self, interface, relation_name, target, config):
+        self.interface = interface
+        self.relation_name = relation_name
+        self._target = target
+        self._config = config
+
+    def __call__(self):
+        # copy the entire tree into the
+        # hooks/relations/<interface>
+        # directory
+        target = self.target / "hooks/relations" / self.interface.name
+        logging.debug("Copying Interface %s: %s", self.interface.name, target)
+        # Ensure the path exists
+        if target.exists():
+            # XXX: fix this to do actual updates
+            return
+        self.interface.directory.copytree(target)
+
+    def __str__(self):
+        return "Copy Interface {}".format(self.interface.name)
+
+    def sign(self):
+        """return sign in the form {relpath: (origin layer, SHA256)}
+        """
+        sigs = {}
+        for entry, sig in utils.walk(self.interface.directory, utils.sign, kind="files"):
+            sigs[entry] = (self.interface.url, "static", sig)
+        return sigs
+
+
+class InterfaceBind(InterfaceCopy):
+    def __init__(self, interface, relation_name, kind, target, config):
+        self.interface = interface
+        self.relation_name = relation_name
+        self.kind = kind
+        self._target = target
+        self._config = config
+
+    DEFAULT_BINDING = """#!/usr/bin/env python
+import os
+from charmhelpers.core.reactive import main
+main('{}')
+"""
+
+    def __call__(self):
+        for hook in ['joined', 'changed', 'broken', 'departed']:
+            target = self.target / "hooks" / "{}-relation-{}".format(
+                self.relation_name, hook)
+            target.write_text(self.DEFAULT_BINDING.format(self.relation_name))
+            target.chmod(0755)
+
+    def __str__(self):
+        return "BInd Interface {}".format(self.interface.name)
+
+
+
 class ManifestTactic(Tactic):
     @classmethod
     def trigger(cls, relpath):
@@ -161,6 +218,7 @@ class SerializedTactic(Tactic):
                     utils.delete_path(key, namespace)
         self.data = data
         self.dump(data)
+        return data
 
 class YAMLTactic(SerializedTactic):
     """Rule Driven YAML generation"""
@@ -208,6 +266,7 @@ class ComposerYAML(YAMLTactic):
         if norm:
             data['includes'] = norm
         self.dump(data)
+        return data
 
     @classmethod
     def trigger(cls, relpath):

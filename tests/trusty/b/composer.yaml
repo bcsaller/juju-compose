@@ -1,4 +1,4 @@
-includes: ["trusty/a"] # , "interface:mysql"]
+includes: ["trusty/a", "interface:mysql"]
 ignore:
     - .bzr/*
     - .git/*
