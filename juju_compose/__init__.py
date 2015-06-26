@@ -56,7 +56,7 @@ fetchers.FETCHERS.insert(0, InterfaceFetcher)
 
 class Configable(object):
     CONFIG_FILE = None
-    CONFIG_KLASS = None
+    CONFIG_KLASS = ComposerConfig
 
     def __init__(self):
         self._config = self.CONFIG_KLASS()
@@ -77,7 +77,6 @@ class Configable(object):
 
 class Interface(Configable):
     CONFIG_FILE = "interface.yaml"
-    CONFIG_KLASS = ComposerConfig
 
     def __init__(self, url, target_repo):
         super(Interface, self).__init__()
@@ -108,6 +107,13 @@ class Interface(Configable):
             else:
                 self.directory = path(fetcher.fetch(self.target_repo))
 
+        if not self.directory.exists():
+            raise OSError(
+                "Unable to locate {}. "
+                "Do you need to set INTERFACE_PATH?".format(
+                    self.url))
+
+
         self.config_file = self.directory / self.CONFIG_FILE
         return self
 
@@ -118,7 +124,6 @@ class Interface(Configable):
 
 class Layer(Configable):
     CONFIG_FILE = "composer.yaml"
-    CONFIG_KLASS = ComposerConfig
 
     def __init__(self, url, target_repo):
         super(Layer, self).__init__()
@@ -144,6 +149,12 @@ class Layer(Configable):
                 self.directory = path(fetcher.path)
             else:
                 self.directory = path(fetcher.fetch(self.target_repo))
+
+        if not self.directory.exists():
+            raise OSError(
+                "Unable to locate {}. "
+                "Do you need to set JUJU_REPOSITY or COMPOSER_PATH?".format(
+                    self.url))
 
         self.config_file = self.directory / self.CONFIG_FILE
         return self

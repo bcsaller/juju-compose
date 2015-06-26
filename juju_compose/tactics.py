@@ -59,6 +59,10 @@ class Tactic(object):
         return self.current.directory.name
 
     @property
+    def repo_path(self):
+        return path("/".join(self.current.directory.splitall()[-2:]))
+
+    @property
     def config(self):
         # Return the config of the layer *above* you
         # as that is the one that controls your compositing
@@ -81,7 +85,7 @@ class Tactic(object):
         target = self.target_file
         sig = {}
         if target.exists() and target.isfile():
-            sig[self.relpath] = (self.layer_name,
+            sig[self.relpath] = (self.repo_path,
                                  self.kind,
                                  utils.sign(self.target_file))
         return sig
@@ -171,7 +175,6 @@ class InterfaceBind(InterfaceCopy):
         self._config = config
 
     DEFAULT_BINDING = """#!/usr/bin/env python
-import os
 from charmhelpers.core.reactive import main
 main('{}')
 """
@@ -197,8 +200,8 @@ main('{}')
                 self.relation_name, hook)
             rel = target.relpath(self._target.directory)
             sigs[rel] = (self.interface.url,
-                            "dynamic",
-                            utils.sign(target))
+                         "dynamic",
+                         utils.sign(target))
         return sigs
 
     def __str__(self):
