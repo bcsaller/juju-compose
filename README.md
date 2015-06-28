@@ -34,9 +34,73 @@ It should be enough to give you an idea how it works. In order for this example
 to run you'll need to pip install bundletester as it shares some code with that
 project.
 
+Theory
+======
+
+A generated charm is composed of layers. The generator acts almost like a
+compiler taking the input from each layer and producing an output file in the
+resultant charm.
+
+The generator keeps track of which layer owns each file and allows layers to
+update files they own should the charm be refreshed later.
+
+The generated charm itself should be treated as immutable. The top layer that
+was used to generate it is where user level modifications should live.
+
+
+Setting Up your Repo
+====================
 This currently allows for two new ENV variables when run
-    COMPOSER_PATH:  a ':' separated list of JUJU_REPOSITORIES that should be searched for includes
+    COMPOSER_PATH:  a ':' separated list of JUJU_REPOSITORY that should be searched for includes
     INTERFACE_PATH: a ':' separated list of paths to resolve interface:_name_ includes from.
+
+JUJU_REPOSITORY entries take the usual format *series*/*charm*
+INTERFACE repos take the format of *interface_name*. Where interface_name is
+the name as it appears in the metadata.yaml
+
+Composition Types
+=================
+
+Each file in each layer gets matched by a single Tactic. Tactics implement how
+the data in a file moves from one layer to the next (and finally to the target
+charm). By default this will be a simple copy but in the cases of certain files
+(mostly known YAML files like metadata.yaml and config.yaml) each layer is
+combined with the previous layers before being written.
+
+Normally the default tactics are fine but you have the ability in the
+composer.yaml to list a set of Tactics objects that will be checked before the
+default and control how data moves from one layer to the next.
+
+
+composer.yaml
+=============
+Each layer used to build a charm can have a composer.yaml file. The top layer
+(the one actually invoked from the command line) must. These tell the generator what do,
+ranging from which base layers to include, to which interfaces. They also allow for 
+the inclusion of specialized directives for processing some types of files.
+
+Keys:
+    includes: ["trusty/mysql", "interface:mysql"]
+    tactics: [ dottedpath.toTacticClass, ]
+    config:
+        deletes: 
+            - key names
+    metadata:
+        deletes:
+            - key names
+
+
+Includes is a list of one or more layers and interfaces that should be
+composited. Those layers may themselves have other includes and/or
+interfaces.
+
+Tactics is a list of Tactics to be loaded. See juju_compose.tactics.Tactics for
+the default interface. You'll typically need to implement at least a trigger() method
+and a __call__() method.
+
+config and metadata take optional lists of keys to remove from config.yaml and
+metadata.yaml when generating their data. This allows for charms to, for
+example, narrow what they expose to clients.
 
 
 TODO:
