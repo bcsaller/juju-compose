@@ -370,3 +370,23 @@ def delta_signatures(metadata_filename):
         if p not in current:
             delete.add(path(p))
     return add, change, delete
+
+
+class ColoredFormatter(logging.Formatter):
+    def __init__(self, terminal, *args, **kwargs):
+        super(ColoredFormatter, self).__init__(*args, **kwargs)
+        self._terminal = terminal
+
+    def format(self, record):
+        output = super(ColoredFormatter, self).format(record)
+        if record.levelno >= logging.CRITICAL:
+            line_color = self._terminal.bold_yellow_on_red
+        elif record.levelno >= logging.ERROR:
+            line_color = self._terminal.red
+        elif record.levelno >= logging.WARNING:
+            line_color = self._terminal.yellow
+        elif record.levelno >= logging.INFO:
+            line_color = self._terminal.green
+        else:
+            line_color = self._terminal.white
+        return line_color(output)

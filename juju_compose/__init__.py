@@ -4,7 +4,9 @@ import argparse
 import json
 import logging
 import os
+import sys
 
+import blessings
 from collections import OrderedDict
 from .path import path
 import tactics
@@ -12,6 +14,7 @@ from .config import ComposerConfig
 from bundletester import fetchers
 import utils
 
+log = logging.getLogger("composer")
 
 class RepoFetcher(fetchers.LocalFetcher):
     @classmethod
@@ -111,7 +114,6 @@ class Interface(Configable):
                 "Unable to locate {}. "
                 "Do you need to set INTERFACE_PATH?".format(
                     self.url))
-
 
         self.config_file = self.directory / self.CONFIG_FILE
         return self
@@ -249,7 +251,7 @@ class Composer(object):
 
     def plan_layers(self, layers, output_files):
         for i, layer in enumerate(layers["layers"]):
-            logging.info("Processing layer: %s", layer.directory.name)
+            log.info("Processing layer: %s", layer.directory.name)
             # walk the layer, consulting the config
             # and creating an entry
             # later layers in the list might modify
@@ -261,10 +263,10 @@ class Composer(object):
             else:
                 config = None
             list(e for e in utils.walk(layer.directory,
-                                   self.build_tactics,
-                                   current=layer,
-                                   config=config,
-                                   output_files=output_files))
+                                       self.build_tactics,
+                                       current=layer,
+                                       config=config,
+                                       output_files=output_files))
         plan = [t for t in output_files.values() if t]
         return plan
 
@@ -307,8 +309,6 @@ class Composer(object):
         output_files = OrderedDict()
         self.plan = self.plan_layers(layers, output_files)
         self.plan_interfaces(layers, output_files, self.plan)
-        if self.log_level == "DEBUG":
-            self.dump(layers)
         return self.plan
 
     def exec_plan(self, plan=None):
@@ -345,34 +345,22 @@ class Composer(object):
             return
         a, c, d = utils.delta_signatures(p)
         for f in a:
-            logging.warn(
+            log.warn(
                 "Added unexpected file, should be in a base layer: %s", f)
         for f in c:
-            logging.warn(
+            log.warn(
                 "Changed file owned by another layer: %s", f)
         for f in d:
-            logging.warn(
+            log.warn(
                 "Deleted a file owned by another layer: %s", f)
         if a or c or d:
             if self.force is False:
-                logging.info(
+                log.info(
                     "Continuing with known changes to target layer. "
                     "Changes will be overwritten")
             else:
                 raise ValueError(
                     "Unable to continue due to unexpected modifications")
-
-    def dump(self, layers):
-        print "REPO:", self.charm, self.target_dir
-        print "Layers:"
-        for l in layers["layers"]:
-            print "\t", l
-        print "Interfaces:"
-        for i in layers["interfaces"]:
-            print "\t", i
-        print "Plan:"
-        for p in self.plan:
-            print "\t", p
 
     def __call__(self):
         self.find_or_create_repo()
@@ -381,6 +369,7 @@ class Composer(object):
 
 
 def main(args=None):
+    terminal = blessings.Terminal()
     composer = Composer()
     parser = argparse.ArgumentParser()
     parser.add_argument('-l', '--log-level', default=logging.INFO)
@@ -398,7 +387,14 @@ def main(args=None):
     if not composer.output_dir:
         composer.output_dir = path(composer.charm).normpath()
 
-    logging.basicConfig(level=composer.log_level)
+    clifmt = utils.ColoredFormatter(
+        terminal,
+        '%(name)s: %(message)s')
+    root_logger = logging.getLogger()
+    clihandler = logging.StreamHandler(sys.stdout)
+    clihandler.setFormatter(clifmt)
+    root_logger.setLevel(composer.log_level)
+    root_logger.addHandler(clihandler)
 
     composer()
 
