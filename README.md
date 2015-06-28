@@ -79,15 +79,15 @@ Each layer used to build a charm can have a composer.yaml file. The top layer
 ranging from which base layers to include, to which interfaces. They also allow for 
 the inclusion of specialized directives for processing some types of files.
 
-Keys:
-    includes: ["trusty/mysql", "interface:mysql"]
-    tactics: [ dottedpath.toTacticClass, ]
-    config:
-        deletes: 
-            - key names
-    metadata:
-        deletes:
-            - key names
+    Keys:
+        includes: ["trusty/mysql", "interface:mysql"]
+        tactics: [ dottedpath.toTacticClass, ]
+        config:
+            deletes: 
+                - key names
+        metadata:
+            deletes:
+                - key names
 
 
 Includes is a list of one or more layers and interfaces that should be
