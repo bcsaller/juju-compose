@@ -16,6 +16,7 @@ import utils
 
 log = logging.getLogger("composer")
 
+
 class RepoFetcher(fetchers.LocalFetcher):
     @classmethod
     def can_fetch(cls, url):
@@ -49,9 +50,24 @@ class InterfaceFetcher(fetchers.LocalFetcher):
                 if p.exists():
                     return dict(path=p)
 
-            # XXX: Attempt to use the WS
-            pass
+            # XXX: Attempt to use a real WS
+            return fetchers.GithubFetcher.can_fetch(url)
         return {}
+
+    def fetch(self, dir_):
+        if hasattr(self, "path"):
+            return super(InterfaceFetcher, self).fetch(dir_)
+        elif hasattr(self, "repo"):
+            # use the github fetcher for now
+            u = self.url[10:]
+            kw = fetchers.GithubFetcher.can_fetch(u)
+            kw['path'] = path(kw['repo']).name.splitext()[0]
+            f = fetchers.GithubFetcher(self.url, **kw)
+            res = f.fetch(dir_)
+            target = dir_ / kw["path"]
+            target.rmtree_p()
+            path(res).rename(target)
+            return target
 
 
 fetchers.FETCHERS.insert(0, InterfaceFetcher)
@@ -81,17 +97,20 @@ class Configable(object):
 class Interface(Configable):
     CONFIG_FILE = "interface.yaml"
 
-    def __init__(self, url, target_repo):
+    def __init__(self, url, target_repo, name=None):
         super(Interface, self).__init__()
         self.url = url
         self.target_repo = target_repo
         self.directory = None
+        self._name = name
 
     def __repr__(self):
         return "<Interface {}:{}>".format(self.url, self.directory)
 
     @property
     def name(self):
+        if self._name:
+            return self._name
         if self.url.startswith("interface:"):
             return self.url[10:]
         return self.url
@@ -104,7 +123,8 @@ class Interface(Configable):
             # which fetchers don't currently  support
             self.directory = path(self.url)
         else:
-            if isinstance(fetcher, fetchers.LocalFetcher):
+            if isinstance(fetcher, fetchers.LocalFetcher) \
+                    and not hasattr(fetcher, "repo"):
                 self.directory = path(fetcher.path)
             else:
                 self.directory = path(fetcher.fetch(self.target_repo))
@@ -116,6 +136,7 @@ class Interface(Configable):
                     self.url))
 
         self.config_file = self.directory / self.CONFIG_FILE
+        self._name = self.config.name
         return self
 
     def install(self, kind, name):
@@ -288,6 +309,9 @@ class Composer(object):
             for iface in layers["interfaces"]:
                 if iface.name not in used_interfaces:
                     # we shouldn't include something the charm doesn't use
+                    log.warn("composer.yaml includes {} which isn't "
+                             "used in metadata.yaml".format(
+                                 iface.name))
                     continue
                 for kind, relation_name, interface_name in specs:
                     # COPY phase

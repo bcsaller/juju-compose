@@ -3,6 +3,7 @@ from .tactics import DEFAULT_TACTICS, load_tactic
 
 import pathspec
 from ruamel import yaml
+import logging
 
 DEFAULT_IGNORES = [
     ".bzr/",
@@ -27,7 +28,11 @@ class ComposerConfig(dict):
         return self[key]
 
     def configure(self, config_file):
-        data = yaml.load(config_file.open())
+        try:
+            data = yaml.load(config_file.open())
+        except yaml.parser.ParserError:
+            logging.critical("Malformed Config file: {}".format(config_file))
+            raise
         if data:
             self.update(data)
         self.validate()
@@ -49,6 +54,10 @@ class ComposerConfig(dict):
     @property
     def ignores(self):
         return self.get('ignore', []) + DEFAULT_IGNORES
+
+    @property
+    def name(self):
+        return self.get('name')
 
     def tactics(self):
         # XXX: combine from config layer
