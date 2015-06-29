@@ -91,7 +91,8 @@ class Tactic(object):
         return sig
 
     def lint(self):
-        pass
+        return True
+
 
     def read(self):
         return None
@@ -99,13 +100,17 @@ class Tactic(object):
 
 class CopyTactic(Tactic):
     def __call__(self):
+        if self.entity.isdir():
+            return
+        should_ignore = utils.ignore_matcher(self.target.config.ignores)
+        if not should_ignore(self.relpath):
+            return
         target = self.target_file
         logging.debug("Copying %s: %s", self.layer_name, target)
         # Ensure the path exists
         target.dirname().makedirs_p()
-        if self.entity.isdir():
-            return
-        if (self.entity != target) and not target.exists() or not self.entity.samefile(target):
+        if (self.entity != target) and not target.exists() \
+                or not self.entity.samefile(target):
             data = self.read()
             if data:
                 target.write_bytes(data)
@@ -136,7 +141,8 @@ class InterfaceCopy(Tactic):
         # copy the entire tree into the
         # hooks/relations/<interface>
         # directory
-        logging.debug("Copying Interface %s: %s", self.interface.name, self.target)
+        logging.debug("Copying Interface %s: %s",
+                      self.interface.name, self.target)
         # Ensure the path exists
         if self.target.exists():
             # XXX: fix this to do actual updates
@@ -168,6 +174,17 @@ class InterfaceCopy(Tactic):
             relpath = entry.relpath(self._target.directory)
             sigs[relpath] = (self.interface.url, "static", sig)
         return sigs
+
+    def lint(self):
+        for entry in self.interface.directory.walkfiles():
+            if entry.splitext()[1] != ".py":
+                continue
+            relpath = entry.relpath(self._target.directory)
+            target = self._target.directory / relpath
+            if not target.exists():
+                continue
+            return utils.delta_python_dump(entry, target,
+                                           from_name=relpath)
 
 
 class InterfaceBind(InterfaceCopy):
@@ -210,7 +227,6 @@ main('{}')
 
     def __str__(self):
         return "Bind Interface {}".format(self.interface.name)
-
 
 
 class ManifestTactic(Tactic):

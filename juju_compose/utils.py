@@ -4,10 +4,14 @@ import hashlib
 import json
 import logging
 import os
+import re
 import subprocess
+import sys
 import time
 from contextlib import contextmanager
 
+from diff_match_patch import diff_match_patch
+import blessings
 import pathspec
 from .path import path
 
@@ -389,5 +393,116 @@ class ColoredFormatter(logging.Formatter):
         elif record.levelno >= logging.INFO:
             line_color = self._terminal.green
         else:
-            line_color = self._terminal.white
+            line_color = self._terminal.cyan
         return line_color(output)
+
+
+class TermWriter(object):
+    def __init__(self, fp=None, term=None):
+        if fp is None:
+            fp = sys.stdout
+        self.fp = fp
+        if term is None:
+            term = blessings.Terminal()
+        self.term = term
+
+    def __getattr__(self, key):
+        return getattr(self.term, key)
+
+    def write(self, msg,  *args, **kwargs):
+        if 't' in kwargs:
+            raise ValueError("Using reserved token 't' in TermWriter.write")
+        kwargs['t'] = self.term
+
+        self.fp.write(msg.format(*args, **kwargs))
+
+
+class _O(dict):
+    def __getattr__(self, k):
+        return self[k]
+
+REACTIVE_PATTERNS = [
+    re.compile("\s*@when"),
+    re.compile(".set_state\(")
+]
+
+
+def delta_python(orig, dest, patterns=REACTIVE_PATTERNS, context=2):
+    """Delta two python files looking for certain patterns"""
+    if isinstance(orig, path):
+        od = orig.text()
+    elif hasattr(orig, 'read'):
+        od = orig.read()
+    else:
+        raise TypeError("Expected path() or file(), got %s" % type(orig))
+    if isinstance(dest, path):
+        dd = dest.text()
+    elif hasattr(orig, 'read'):
+        dd = dest.read()
+    else:
+        raise TypeError("Expected path() or file(), got %s" % type(dest))
+
+    differ = diff_match_patch()
+    linect = 0
+    lastMatch = None
+    for res in differ.diff_main(od, dd):
+        if res[0] == diff_match_patch.DIFF_EQUAL:
+            linect += res[1].count('\n')
+            lastMatch = res[:]
+            continue
+        elif res[0] == diff_match_patch.DIFF_INSERT:
+            linect += res[1].count('\n')
+        else:
+            linect -= res[1].count('\n')
+
+        for p in patterns:
+            if p.search(lastMatch[1]):
+                yield [linect, lastMatch, res]
+                break
+
+
+def delta_python_dump(orig, dest, patterns=REACTIVE_PATTERNS,
+                      context=2, term=None,
+                      from_name=None, to_name=None):
+    if term is None:
+        term = TermWriter()
+
+    def norm_sources(orig, dest):
+        if from_name:
+            oname = from_name
+        else:
+            oname = orig
+        if to_name:
+            dname = to_name
+        else:
+            dname = dest
+        return _O({'orig_name': oname, 'dest_name': dname})
+
+    def prefix_lines(lines, lineno):
+        if isinstance(lines, str):
+            lines = lines.splitlines()
+        for i, l in enumerate(lines):
+            lines[i] = "%-5d| %s" % (lineno + i, l)
+        return "\n".join(lines)
+
+    i = 0
+    for lineno, last, current in delta_python(orig, dest, patterns, context):
+        # pull enough context
+        if last:
+            context_lines = last[1].splitlines()[-context:]
+        message = norm_sources(orig, dest)
+        message['context'] = prefix_lines(context_lines, lineno - context)
+        message['lineno'] = lineno
+        message['delta'] = current[1]
+        s = {diff_match_patch.DIFF_EQUAL: term.normal,
+             diff_match_patch.DIFF_INSERT: term.green,
+             diff_match_patch.DIFF_DELETE: term.red}[current[0]]
+        message['status_color'] = s
+        # output message
+        term.write("{t.bold}{m.orig_name}{t.normal} --> "
+                   "{t.bold}{m.dest_name}{t.normal}:\n",
+                   m=message)
+        term.write("{m.context}{m.status_color}{m.delta}{t.normal}\n",
+                   m=message)
+        i += 1
+    return i == 0

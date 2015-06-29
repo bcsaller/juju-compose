@@ -155,8 +155,8 @@ class TestCompose(unittest.TestCase):
         # show that we pulled the interface from github
         init = base / "hooks/relations/pgsql/__init__.py"
         self.assertTrue(init.exists())
-
-
+        main = base / "hooks/reactive/main.py"
+        self.assertTrue(main.exists())
 
 
 if __name__ == '__main__':

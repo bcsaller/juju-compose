@@ -342,10 +342,13 @@ class Composer(object):
         if not plan:
             plan = self.plan
         signatures = {}
+        cont = True
         for phase in ['lint', 'read', '__call__', 'sign']:
             for tactic in plan:
                 if phase == "lint":
-                    tactic.lint()
+                    cont &= tactic.lint()
+                    if cont is False and self.force is not True:
+                        break
                 elif phase == "read":
                     # We use a read (into memory phase to make layer comps
                     # simpler)
@@ -396,7 +399,6 @@ class Composer(object):
 
 
 def main(args=None):
-    terminal = blessings.Terminal()
     composer = Composer()
     parser = argparse.ArgumentParser()
     parser.add_argument('-l', '--log-level', default=logging.INFO)
@@ -415,7 +417,7 @@ def main(args=None):
         composer.output_dir = path(composer.charm).normpath()
 
     clifmt = utils.ColoredFormatter(
-        terminal,
+        blessings.Terminal(),
         '%(name)s: %(message)s')
     root_logger = logging.getLogger()
     clihandler = logging.StreamHandler(sys.stdout)
