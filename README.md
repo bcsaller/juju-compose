@@ -1,4 +1,5 @@
 Juju Charm Composition
+======================
 
 This is a Prototype designed to flush out requirements around Charm
 Composition. Today its very common to fork charms for minor changes or to have
@@ -19,11 +20,11 @@ composition supported natively in juju-core.
 
 Today the system can be run as follows:
 
-    ./juju_compose.py -o <output_repo> <output_charm_name> <charm to build from>
+    ./juju_compose.py -o <output_repo> <charm to build from>
 
 So you might use the included (very unrealistic) test case as like:
 
-    ./juju_compose -o out foo tests/trusty/tester
+    ./juju_compose -o out -n foo tests/trusty/tester
 
 Running this should produce a charm in out/trusty/foo which is composed
 according to the composer.yaml file in tests/trusty/tester. While this isn't
