@@ -144,7 +144,7 @@ class TestCompose(unittest.TestCase):
         composer.output_dir = "out"
         composer.series = "trusty"
         composer.name = "foo"
-        composer.charm = "tests/trusty/c"
+        composer.charm = "tests/trusty/c-reactive"
         composer()
         base = path('out/trusty/foo')
         self.assertTrue(base.exists())
