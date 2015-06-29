@@ -2,7 +2,7 @@ from .tactics import DEFAULT_TACTICS, load_tactic
 
 
 import pathspec
-import yaml
+from ruamel import yaml
 
 DEFAULT_IGNORES = [
     ".bzr/",

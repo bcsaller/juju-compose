@@ -373,6 +373,7 @@ def delta_signatures(metadata_filename):
 
 
 class ColoredFormatter(logging.Formatter):
+
     def __init__(self, terminal, *args, **kwargs):
         super(ColoredFormatter, self).__init__(*args, **kwargs)
         self._terminal = terminal

@@ -393,6 +393,8 @@ def main(args=None):
     root_logger = logging.getLogger()
     clihandler = logging.StreamHandler(sys.stdout)
     clihandler.setFormatter(clifmt)
+    if isinstance(composer.log_level, str):
+        composer.log_level = composer.log_level.upper()
     root_logger.setLevel(composer.log_level)
     root_logger.addHandler(clihandler)
 

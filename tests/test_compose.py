@@ -4,7 +4,7 @@ import logging
 import os
 import unittest
 import juju_compose
-import yaml
+from ruamel import yaml
 
 import pkg_resources
 
@@ -75,7 +75,7 @@ class TestCompose(unittest.TestCase):
         self.assertEquals(data['metadata.yaml'], [
             u'trusty/tester',
             "dynamic",
-            u'60a517b47b001b4ac63048576148c3487f7c3a9ce70322f756218c3ca337275d'])
+            u'ecb80da834070599ac81190e78448440b442d4eda9cea2e4af3a1db58e60e400'])
 
     def test_regenerate_inplace(self):
         # take a generated example where a base layer has changed

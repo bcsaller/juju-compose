@@ -1,6 +1,6 @@
 import logging
 import json
-import yaml
+from ruamel import yaml
 
 from .path import path
 import utils
@@ -165,6 +165,21 @@ class InterfaceCopy(Tactic):
             sigs[relpath] = (self.interface.url, "static", sig)
         return sigs
 
+    def lint(self):
+        # XXX: still dead code
+        return
+        for entity, _ in utils.walk(self.interface.directory,
+                                    lambda x: True,
+                                    kind="files"):
+            target = entity.relpath(self.interface.directory)
+            target = (self.target / target).normpath()
+            # we can now apply a semantic diff to the interface
+            # files if the target exists, if it doesn't
+            # then they are not regenerating and they get what they
+            # get
+            if not target.exits():
+                continue
+
 
 class InterfaceBind(InterfaceCopy):
     def __init__(self, interface, relation_name, kind, target, config):
@@ -230,7 +245,7 @@ class SerializedTactic(Tactic):
         # Invoke the previous tactic
         existing()
         if existing.data is not None:
-            self.data = existing.data.copy()
+            self.data = existing.data
         return self
 
     def __call__(self):
@@ -255,16 +270,18 @@ class SerializedTactic(Tactic):
         self.dump(data)
         return data
 
+
 class YAMLTactic(SerializedTactic):
     """Rule Driven YAML generation"""
     prefix = None
 
     def load(self, fn):
-        return yaml.safe_load(fn)
+        return yaml.load(fn, Loader=yaml.RoundTripLoader)
 
     def dump(self, data):
-        yaml.safe_dump(data, self.target_file.open('w'),
-                       default_flow_style=False)
+        yaml.dump(data, self.target_file.open('w'),
+                  Dumper=yaml.RoundTripDumper,
+                  default_flow_style=False)
 
 
 class JSONTactic(SerializedTactic):
@@ -306,7 +323,6 @@ class ComposerYAML(YAMLTactic):
     @classmethod
     def trigger(cls, relpath):
         return relpath == "composer.yaml"
-
 
 
 class MetadataYAML(YAMLTactic):
