@@ -151,6 +151,10 @@ class InterfaceCopy(Tactic):
             if target.parent and not target.parent.exists():
                 target.parent.makedirs_p()
             entity.copy2(target)
+        init = self.target / "__init__.py"
+        if not init.exists():
+            # ensure we can import from here directly
+            init.touch()
 
     def __str__(self):
         return "Copy Interface {}".format(self.interface.name)
@@ -164,21 +168,6 @@ class InterfaceCopy(Tactic):
             relpath = entry.relpath(self._target.directory)
             sigs[relpath] = (self.interface.url, "static", sig)
         return sigs
-
-    def lint(self):
-        # XXX: still dead code
-        return
-        for entity, _ in utils.walk(self.interface.directory,
-                                    lambda x: True,
-                                    kind="files"):
-            target = entity.relpath(self.interface.directory)
-            target = (self.target / target).normpath()
-            # we can now apply a semantic diff to the interface
-            # files if the target exists, if it doesn't
-            # then they are not regenerating and they get what they
-            # get
-            if not target.exits():
-                continue
 
 
 class InterfaceBind(InterfaceCopy):

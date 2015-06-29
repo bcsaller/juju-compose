@@ -7,6 +7,7 @@ import juju_compose
 from ruamel import yaml
 
 import pkg_resources
+from nose.plugins.attrib import attr
 
 
 class TestCompose(unittest.TestCase):
@@ -132,6 +133,28 @@ class TestCompose(unittest.TestCase):
             self.assertTrue((base / "hooks" /
                              "mysql-relation-{}".format(kind)).exists())
 
+        # and ensure we have an init file (the interface doesn't its added)
+        init = base / "hooks/relations/mysql/__init__.py"
+        self.assertTrue(init.exists())
+
+    @attr("online")
+    def test_remote_interface(self):
+        composer = juju_compose.Composer()
+        composer.log_level = "WARNING"
+        composer.output_dir = "out"
+        composer.series = "trusty"
+        composer.name = "foo"
+        composer.charm = "tests/trusty/c"
+        composer()
+        base = path('out/trusty/foo')
+        self.assertTrue(base.exists())
+
+        # basics
+        self.assertTrue((base / "a").exists())
+        self.assertTrue((base / "README.md").exists())
+        # show that we pulled the interface from github
+        init = base / "hooks/relations/pgsql/__init__.py"
+        self.assertTrue(init.exists())
 
 
 

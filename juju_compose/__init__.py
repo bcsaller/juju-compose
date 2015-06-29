@@ -60,13 +60,16 @@ class InterfaceFetcher(fetchers.LocalFetcher):
         elif hasattr(self, "repo"):
             # use the github fetcher for now
             u = self.url[10:]
-            kw = fetchers.GithubFetcher.can_fetch(u)
-            kw['path'] = path(kw['repo']).name.splitext()[0]
-            f = fetchers.GithubFetcher(self.url, **kw)
+            f = fetchers.get_fetcher(u)
+            if hasattr(f, "repo"):
+                basename = path(f.repo).name.splitext()[0]
+            else:
+                basename = u
             res = f.fetch(dir_)
-            target = dir_ / kw["path"]
-            target.rmtree_p()
-            path(res).rename(target)
+            target = dir_ / basename
+            if res != target:
+                target.rmtree_p()
+                path(res).rename(target)
             return target
 
 
