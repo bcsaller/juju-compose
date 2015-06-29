@@ -1,6 +1,9 @@
 Juju Charm Composition
 ======================
 
+Status | *Alpha*
+------- -------
+
 This is a Prototype designed to flush out requirements around Charm
 Composition. Today its very common to fork charms for minor changes or to have
 to use subordinate charms to take advantages of frameworks where you need to
