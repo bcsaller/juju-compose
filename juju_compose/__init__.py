@@ -13,6 +13,7 @@ import tactics
 from .config import ComposerConfig
 from bundletester import fetchers
 import utils
+from ruamel import yaml
 
 log = logging.getLogger("composer")
 
@@ -207,7 +208,7 @@ class Composer(object):
         self.deps = (base / "deps" / self.series).makedirs_p()
         self.target_dir = (self.repo / self.name).mkdir_p()
 
-    def find_or_create_repo(self):
+    def find_or_create_repo(self, allow_create=True):
         # see if output dir is already in a repo, we can use that directly
         if self.output_dir == path(self.charm).normpath():
             # we've indicated in the cmdline that we are doing an inplace
@@ -218,7 +219,10 @@ class Composer(object):
                 self.deps = (self.repo / "deps" / self.series).makedirs_p()
                 self.target_dir = self.output_dir
                 return
-        self.create_repo()
+        if allow_create:
+            self.create_repo()
+        else:
+            raise ValueError("%s doesn't seem valid", self.charm.directory)
 
     def fetch(self):
         layer = Layer(self.charm, self.deps).fetch()
@@ -397,6 +401,91 @@ class Composer(object):
         self.validate()
         self.generate()
 
+    def inspect(self):
+        tw = utils.TermWriter()
+        self.target_dir = self.charm
+        manp = self.target_dir / ".composer.manifest"
+        comp = self.target_dir / "composer.yaml"
+        if not manp.exists() or not comp.exists():
+            return
+        manifest = json.loads(manp.text())
+        composer = yaml.load(comp.open())
+        a, c, d = utils.delta_signatures(manp)
+        bd = self.target_dir
+
+        layers = set()
+        for l, _, _ in manifest.values():
+            layers.add(l)
+        layers = list(layers)
+        theme = {
+            0: "normal",
+            1: "green",
+            2: "cyan",
+            3: "red",
+            4: "magenta",
+            5: "yellow"
+        }
+
+        tw.write("Inspect %s\n" % composer["is"])
+        for layer in layers:
+            tw.write("# {color}{layer}{t.normal}\n",
+                     color=getattr(tw, theme.get(
+                         layers.index(layer), "normal")),
+                     layer=layer)
+        tw.write("\n")
+
+        tw.write("{t.blue}{target}{t.normal}\n", target=self.target_dir)
+        for entry in bd.walk():
+            rel = entry.relpath(bd)
+            depth = len(rel.splitall()) - 2
+            prefix = " ├──── "
+            suffix = ""
+            if rel in a:
+                suffix = "+"
+            elif rel in c:
+                suffix = "*"
+            # name of layer this belongs to
+            if rel in manifest:
+                layer = manifest[rel][0]
+                layerKey = layers.index(layer)
+                color = getattr(tw, theme.get(layerKey, "normal"))
+            else:
+                if entry.isdir():
+                    color = tw.blue
+                else:
+                    color = tw.term.normal
+
+            tw.write("{depth}{prefix}{layerColor}{entry} {t.bold}{suffix}{t.normal}\n",
+                     depth="    " * depth,
+                     prefix=prefix,
+                     layerColor=color,
+                     suffix=suffix,
+                     entry=rel.name)
+
+
+def configLogging(composer):
+    clifmt = utils.ColoredFormatter(
+        blessings.Terminal(),
+        '%(name)s: %(message)s')
+    root_logger = logging.getLogger()
+    clihandler = logging.StreamHandler(sys.stdout)
+    clihandler.setFormatter(clifmt)
+    if isinstance(composer.log_level, str):
+        composer.log_level = composer.log_level.upper()
+    root_logger.setLevel(composer.log_level)
+    root_logger.addHandler(clihandler)
+
+
+def inspect(args=None):
+    composer = Composer()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-l', '--log-level', default=logging.INFO)
+    parser.add_argument('charm', default=".", type=path)
+    # Namespace will set the options as attrs of composer
+    parser.parse_args(args, namespace=composer)
+    configLogging(composer)
+    composer.inspect()
+
 
 def main(args=None):
     composer = Composer()
@@ -415,18 +504,7 @@ def main(args=None):
         composer.name = path(composer.charm).normpath().basename()
     if not composer.output_dir:
         composer.output_dir = path(composer.charm).normpath()
-
-    clifmt = utils.ColoredFormatter(
-        blessings.Terminal(),
-        '%(name)s: %(message)s')
-    root_logger = logging.getLogger()
-    clihandler = logging.StreamHandler(sys.stdout)
-    clihandler.setFormatter(clifmt)
-    if isinstance(composer.log_level, str):
-        composer.log_level = composer.log_level.upper()
-    root_logger.setLevel(composer.log_level)
-    root_logger.addHandler(clihandler)
-
+    configLogging(composer)
     composer()
 
 

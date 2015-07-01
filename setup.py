@@ -12,6 +12,7 @@ setup(name='composer',
             entry_points={
                 'console_scripts': [
                     'juju-compose = juju_compose:main',
+                    'juju-inspect = juju_compose:inspect',
                 ]
             }
       )

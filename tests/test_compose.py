@@ -53,7 +53,7 @@ class TestCompose(unittest.TestCase):
         self.assertTrue(cyaml.exists())
         cyaml_data = yaml.load(cyaml.open())
         self.assertEquals(cyaml_data['includes'], ['trusty/mysql'])
-        self.assertEquals(cyaml_data['is'], ['trusty/tester'])
+        self.assertEquals(cyaml_data['is'], 'trusty/tester')
 
         self.assertTrue((base / "hooks/config-changed").exists())
 
@@ -112,14 +112,14 @@ class TestCompose(unittest.TestCase):
         cy = base / "composer.yaml"
         config = yaml.load(cy.open())
         self.assertEquals(config["includes"], ["trusty/a", "interface:mysql"])
-        self.assertEquals(config["is"], ["trusty/foo"])
+        self.assertEquals(config["is"], "trusty/foo")
 
         # We can even run it more than once
         composer()
         cy = base / "composer.yaml"
         config = yaml.load(cy.open())
         self.assertEquals(config["includes"], ["trusty/a", "interface:mysql"])
-        self.assertEquals(config["is"], ["trusty/foo"])
+        self.assertEquals(config["is"], "trusty/foo")
 
         # We included an interface, we should be able to assert things about it
         # in its final form as well
