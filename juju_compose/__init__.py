@@ -9,11 +9,11 @@ import sys
 import blessings
 from collections import OrderedDict
 from .path import path
+import inspector
 import tactics
 from .config import ComposerConfig
 from bundletester import fetchers
 import utils
-from ruamel import yaml
 
 log = logging.getLogger("composer")
 
@@ -402,65 +402,7 @@ class Composer(object):
         self.generate()
 
     def inspect(self):
-        tw = utils.TermWriter()
-        self.target_dir = self.charm
-        manp = self.target_dir / ".composer.manifest"
-        comp = self.target_dir / "composer.yaml"
-        if not manp.exists() or not comp.exists():
-            return
-        manifest = json.loads(manp.text())
-        composer = yaml.load(comp.open())
-        a, c, d = utils.delta_signatures(manp)
-        bd = self.target_dir
-
-        layers = set()
-        for l, _, _ in manifest.values():
-            layers.add(l)
-        layers = list(layers)
-        theme = {
-            0: "normal",
-            1: "green",
-            2: "cyan",
-            3: "red",
-            4: "magenta",
-            5: "yellow"
-        }
-
-        tw.write("Inspect %s\n" % composer["is"])
-        for layer in layers:
-            tw.write("# {color}{layer}{t.normal}\n",
-                     color=getattr(tw, theme.get(
-                         layers.index(layer), "normal")),
-                     layer=layer)
-        tw.write("\n")
-
-        tw.write("{t.blue}{target}{t.normal}\n", target=self.target_dir)
-        for entry in bd.walk():
-            rel = entry.relpath(bd)
-            depth = len(rel.splitall()) - 2
-            prefix = " ├──── "
-            suffix = ""
-            if rel in a:
-                suffix = "+"
-            elif rel in c:
-                suffix = "*"
-            # name of layer this belongs to
-            if rel in manifest:
-                layer = manifest[rel][0]
-                layerKey = layers.index(layer)
-                color = getattr(tw, theme.get(layerKey, "normal"))
-            else:
-                if entry.isdir():
-                    color = tw.blue
-                else:
-                    color = tw.term.normal
-
-            tw.write("{depth}{prefix}{layerColor}{entry} {t.bold}{suffix}{t.normal}\n",
-                     depth="    " * depth,
-                     prefix=prefix,
-                     layerColor=color,
-                     suffix=suffix,
-                     entry=rel.name)
+        inspector.inspect(self.charm)
 
 
 def configLogging(composer):
