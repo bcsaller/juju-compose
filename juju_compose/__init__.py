@@ -160,6 +160,10 @@ class Layer(Configable):
     def __repr__(self):
         return "<Layer {}:{}>".format(self.url, self.directory)
 
+    @property
+    def name(self):
+        return path("/".join(self.directory.splitall()[-2:]))
+
     def __div__(self, other):
         return self.directory / other
 
@@ -242,7 +246,19 @@ class Composer(object):
         # we can build out our plan for each file in the
         # output layer
         results["layers"].append(layer)
+        self._layers = results["layers"]
+        self._interfaces = results["interfaces"]
         return results
+
+    @property
+    def layers(self):
+        layers = []
+        for i in self._layers:
+            layers.append(i.name)
+        for i in self._interfaces:
+            layers.append(i.url)
+        layers.append("composer")
+        return layers
 
     def fetch_dep(self, layer, results):
         # Recursively fetch and scan layers
@@ -342,9 +358,11 @@ class Composer(object):
         self.plan_interfaces(layers, output_files, self.plan)
         return self.plan
 
-    def exec_plan(self, plan=None):
+    def exec_plan(self, plan=None, layers=None):
         if not plan:
             plan = self.plan
+        if not layers:
+            layers = self.layers
         signatures = {}
         cont = True
         for phase in ['lint', 'read', '__call__', 'sign']:
@@ -366,7 +384,10 @@ class Composer(object):
         # write out the sigs
         sigs = self.target / ".composer.manifest"
         signatures['.composer.manifest'] = ["composer", 'dynamic', 'unchecked']
-        sigs.write_text(json.dumps(signatures, indent=2))
+        sigs.write_text(json.dumps(dict(
+            signatures=signatures,
+            layers=layers,
+        ), indent=2))
 
     def generate(self):
         layers = self.fetch()

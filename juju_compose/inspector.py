@@ -7,9 +7,9 @@ theme = {
     0: "normal",
     1: "green",
     2: "cyan",
-    3: "red",
-    4: "magenta",
-    5: "yellow"
+    3: "magenta",
+    4: "yellow",
+    5: "red",
 }
 
 
@@ -46,10 +46,8 @@ def inspect(charm):
     composer = yaml.load(comp.open())
     a, c, d = utils.delta_signatures(manp)
 
-    layers = set()
-    for l, _, _ in manifest.values():
-        layers.add(l)
-    layers = list(layers)
+    # ordered list of layers used for legend
+    layers = list(manifest['layers'])
 
     def get_depth(e):
         rel = e.relpath(charm)
@@ -67,10 +65,10 @@ def inspect(charm):
     def get_color(rel):
         # name of layer this belongs to
         color = tw.term.normal
-        if rel in manifest:
-            layer = manifest[rel][0]
-            layerKey = layers.index(layer)
-            color = getattr(tw, theme.get(layerKey, "normal"))
+        if rel in manifest['signatures']:
+            layer = manifest['signatures'][rel][0]
+            layer_key = layers.index(layer)
+            color = getattr(tw, theme.get(layer_key, "normal"))
         else:
             if entry.isdir():
                 color = tw.blue
