@@ -68,12 +68,12 @@ class TestCompose(unittest.TestCase):
         sigs = base / ".composer.manifest"
         self.assertTrue(sigs.exists())
         data = json.load(sigs.open())
-        self.assertEquals(data["README.md"], [
+        self.assertEquals(data['signatures']["README.md"], [
             u'trusty/tester',
             "static",
             u'cfac20374288c097975e9f25a0d7c81783acdbc8124302ff4a731a4aea10de99'])
 
-        self.assertEquals(data['metadata.yaml'], [
+        self.assertEquals(data["signatures"]['metadata.yaml'], [
             u'trusty/tester',
             "dynamic",
             u'ecb80da834070599ac81190e78448440b442d4eda9cea2e4af3a1db58e60e400'])
