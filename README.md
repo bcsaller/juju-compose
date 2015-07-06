@@ -107,6 +107,14 @@ metadata.yaml when generating their data. This allows for charms to, for
 example, narrow what they expose to clients.
 
 
+Inspect
+=======
+
+If you've already generated a charm you can see which layers own which files by
+using the include **juju inspect [charmdir]*** command. This should render a
+tree of the files in the color of each layer. Each layers assigned color is
+presented in a legend at the top of the output.
+
 TODO:
 - lint about methods in base layer not provided/extended in lower
 layers
