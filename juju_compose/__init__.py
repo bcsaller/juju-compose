@@ -13,6 +13,7 @@ import inspector
 import tactics
 from .config import ComposerConfig
 from bundletester import fetchers
+import requests
 import utils
 
 log = logging.getLogger("composer")
@@ -41,6 +42,7 @@ class InterfaceFetcher(fetchers.LocalFetcher):
         # the interface webservice
         if url.startswith("interface:"):
             url = url[10:]
+
             search_path = [path(os.getcwd()) / "interfaces",
                            os.environ.get("JUJU_REPOSITORY", ".")]
             cp = os.environ.get("INTERFACE_PATH")
@@ -50,9 +52,10 @@ class InterfaceFetcher(fetchers.LocalFetcher):
                 p = (path(part) / url).normpath()
                 if p.exists():
                     return dict(path=p)
-
-            # XXX: Attempt to use a real WS
-            return fetchers.GithubFetcher.can_fetch(url)
+            uri = "http://localhost:8888/api/v1/interface/%s" % url
+            result = requests.get(uri)
+            if result.ok:
+                return result.json()
         return {}
 
     def fetch(self, dir_):
@@ -61,7 +64,7 @@ class InterfaceFetcher(fetchers.LocalFetcher):
         elif hasattr(self, "repo"):
             # use the github fetcher for now
             u = self.url[10:]
-            f = fetchers.get_fetcher(u)
+            f = fetchers.get_fetcher(self.repo)
             if hasattr(f, "repo"):
                 basename = path(f.repo).name.splitext()[0]
             else:
@@ -359,10 +362,6 @@ class Composer(object):
         return self.plan
 
     def exec_plan(self, plan=None, layers=None):
-        if not plan:
-            plan = self.plan
-        if not layers:
-            layers = self.layers
         signatures = {}
         cont = True
         for phase in ['lint', 'read', '__call__', 'sign']:
@@ -382,6 +381,9 @@ class Composer(object):
                     if sig:
                         signatures.update(sig)
         # write out the sigs
+        self.write_signatures(signatures, layers)
+
+    def write_signatures(self, signatures, layers):
         sigs = self.target / ".composer.manifest"
         signatures['.composer.manifest'] = ["composer", 'dynamic', 'unchecked']
         sigs.write_text(json.dumps(dict(
@@ -392,7 +394,7 @@ class Composer(object):
     def generate(self):
         layers = self.fetch()
         self.formulate_plan(layers)
-        self.exec_plan()
+        self.exec_plan(self.plan, self.layers)
 
     def validate(self):
         p = self.target_dir / ".composer.manifest"

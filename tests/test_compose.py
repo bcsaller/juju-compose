@@ -1,14 +1,12 @@
 from juju_compose.path import path
+from ruamel import yaml
 import json
+import juju_compose
 import logging
 import os
-import unittest
-import juju_compose
-from ruamel import yaml
-
 import pkg_resources
-from nose.plugins.attrib import attr
-
+import responses
+import unittest
 
 class TestCompose(unittest.TestCase):
     def setUp(self):
@@ -137,8 +135,20 @@ class TestCompose(unittest.TestCase):
         init = base / "hooks/relations/mysql/__init__.py"
         self.assertTrue(init.exists())
 
-    @attr("online")
+
+    @responses.activate
     def test_remote_interface(self):
+        responses.add(responses.GET, "http://localhost:8888/api/v1/interface/pgsql",
+                body='''{
+                      "id": "pgsql",
+                      "name": "pgsql4",
+                      "repo": "https://github.com/bcsaller/juju-relation-pgsql.git",
+                      "_id": {
+                          "$oid": "55a471959c1d246feae487e5"
+                      },
+                      "version": 1
+                      }''',
+                  content_type="application/json")
         composer = juju_compose.Composer()
         composer.log_level = "WARNING"
         composer.output_dir = "out"

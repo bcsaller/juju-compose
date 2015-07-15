@@ -4,3 +4,5 @@ bundletester
 pathspec
 blessings
 bzr+lp:~johnsca/charm-helpers/reactive/
+requests
+responses

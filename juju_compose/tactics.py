@@ -93,7 +93,6 @@ class Tactic(object):
     def lint(self):
         return True
 
-
     def read(self):
         return None
 
@@ -382,8 +381,8 @@ DEFAULT_TACTICS = [
     ManifestTactic,
     MetadataYAML,
     ConfigYAML,
+    ComposerYAML,
     HookTactic,
     ActionTactic,
-    ComposerYAML,
     CopyTactic
 ]
