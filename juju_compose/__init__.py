@@ -372,6 +372,8 @@ class Composer(object):
                                  iface.name))
                     continue
                 for kind, relation_name, interface_name in specs:
+                    if interface_name != iface.name:
+                        continue
                     # COPY phase
                     plan.append(
                         tactics.InterfaceCopy(iface, relation_name,
