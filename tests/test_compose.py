@@ -110,14 +110,14 @@ class TestCompose(unittest.TestCase):
         cy = base / "composer.yaml"
         config = yaml.load(cy.open())
         self.assertEquals(config["includes"], ["trusty/a", "interface:mysql"])
-        self.assertEquals(config["is"], "trusty/foo")
+        self.assertEquals(config["is"], "trusty/b")
 
         # We can even run it more than once
         composer()
         cy = base / "composer.yaml"
         config = yaml.load(cy.open())
         self.assertEquals(config["includes"], ["trusty/a", "interface:mysql"])
-        self.assertEquals(config["is"], "trusty/foo")
+        self.assertEquals(config["is"], "trusty/b")
 
         # We included an interface, we should be able to assert things about it
         # in its final form as well

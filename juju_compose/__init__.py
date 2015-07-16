@@ -37,6 +37,9 @@ fetchers.FETCHERS.insert(0, RepoFetcher)
 
 
 class InterfaceFetcher(fetchers.LocalFetcher):
+    # XXX: When hosted somewhere, fix this
+    INTERFACE_DOMAIN = "http://localhost:8888"
+
     @classmethod
     def can_fetch(cls, url):
         # Search local path first, then
@@ -52,9 +55,14 @@ class InterfaceFetcher(fetchers.LocalFetcher):
                 p = (path(part) / url).normpath()
                 if p.exists():
                     return dict(path=p)
-            uri = "http://localhost:8888/api/v1/interface/%s" % url
-            result = requests.get(uri)
-            if result.ok:
+
+            uri = "%s/api/v1/interface/%s" % (
+                cls.INTERFACE_DOMAIN, url)
+            try:
+                result = requests.get(uri)
+            except:
+                result = None
+            if result and result.ok:
                 result =  result.json()
                 if "repo" in result:
                     return result
