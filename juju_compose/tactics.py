@@ -310,7 +310,8 @@ class ComposerYAML(YAMLTactic):
             return
         # The split should result in the series/charm path only
         # XXX: there will be strange interactions with cs: vs local:
-        data['is'] = "/".join(self.current.directory.splitall()[-2:])
+        if not 'is' in data:
+            data['is'] = "/".join(self.current.directory.splitall()[-2:])
         inc = data.get('includes', [])
         norm = []
         for i in inc:
