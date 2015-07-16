@@ -8,6 +8,7 @@ import sys
 
 import blessings
 from collections import OrderedDict
+from config import DEFAULT_IGNORES
 from .path import path
 import inspector
 import tactics
@@ -400,7 +401,9 @@ class Composer(object):
         p = self.target_dir / ".composer.manifest"
         if not p.exists():
             return
-        a, c, d = utils.delta_signatures(p)
+        ignorer = utils.ignore_matcher(DEFAULT_IGNORES)
+        a, c, d = utils.delta_signatures(p, ignorer)
+
         for f in a:
             log.warn(
                 "Added unexpected file, should be in a base layer: %s", f)
