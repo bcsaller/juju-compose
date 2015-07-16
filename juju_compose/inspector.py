@@ -1,6 +1,7 @@
 # coding=utf-8
 import json
 from ruamel import yaml
+import config
 import utils
 
 theme = {
@@ -83,11 +84,14 @@ def inspect(charm):
     tw.write("\n")
     tw.write("{t.blue}{target}{t.normal}\n", target=charm)
 
+    ignorer = utils.ignore_matcher(config.DEFAULT_IGNORES)
     walk = sorted(utils.walk(charm, get_depth),
                     key=lambda x: x[1][0])
     for i in range(len(walk) - 1):
         entry, (rel, depth) = walk[i]
         nEnt, (nrel, ndepth) = walk[i + 1]
+        if not ignorer(rel):
+            continue
 
         tw.write("{prefix}{layerColor}{entry} "
                     "{t.bold}{suffix}{t.normal}\n",
