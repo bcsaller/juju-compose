@@ -43,7 +43,6 @@ class InterfaceFetcher(fetchers.LocalFetcher):
         # the interface webservice
         if url.startswith("interface:"):
             url = url[10:]
-
             search_path = [path(os.getcwd()) / "interfaces",
                            os.environ.get("JUJU_REPOSITORY", ".")]
             cp = os.environ.get("INTERFACE_PATH")
@@ -56,7 +55,9 @@ class InterfaceFetcher(fetchers.LocalFetcher):
             uri = "http://localhost:8888/api/v1/interface/%s" % url
             result = requests.get(uri)
             if result.ok:
-                return result.json()
+                result =  result.json()
+                if "repo" in result:
+                    return result
         return {}
 
     def fetch(self, dir_):
