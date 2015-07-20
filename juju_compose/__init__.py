@@ -92,6 +92,7 @@ class InterfaceFetcher(fetchers.LocalFetcher):
 
 fetchers.FETCHERS.insert(0, InterfaceFetcher)
 
+
 class LaunchpadGitFetcher(Fetcher):
     # XXX: this should be upstreamed
     MATCH = re.compile(r"""
@@ -495,12 +496,17 @@ def main(args=None):
     parser.add_argument('-f', '--force', action="store_true")
     parser.add_argument('-o', '--output-dir')
     parser.add_argument('-s', '--series', default="trusty")
+    parser.add_argument('--interface-service',
+                        default="http://localhost:8888")
     parser.add_argument('-n', '--name',
                         default=path(os.getcwd).dirname(),
                         help="Generate a charm of 'name' from 'charm'")
     parser.add_argument('charm', default=".", type=path)
     # Namespace will set the options as attrs of composer
     parser.parse_args(args, namespace=composer)
+    # Monkey patch in the domain for the interface webservice
+    InterfaceFetcher.INTERFACE_DOMAIN = composer.interface_service
+
     if not composer.name:
         composer.name = path(composer.charm).normpath().basename()
     if not composer.output_dir:
