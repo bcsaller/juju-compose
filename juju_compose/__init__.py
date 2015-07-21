@@ -59,17 +59,21 @@ class InterfaceFetcher(fetchers.LocalFetcher):
                 if p.exists():
                     return dict(path=p)
 
-            uri = "%s/api/v1/interface/%s/" % (
-                cls.INTERFACE_DOMAIN, url)
-            try:
-                result = requests.get(uri)
-            except:
-                result = None
-            if result and result.ok:
-                result = result.json()
-                if "repo" in result:
-                    return result
-        return {}
+            choices = [url]
+            if url.startswith("juju-relation-"):
+                choices.append(url[len("juju-relation-"):])
+            for choice in choices:
+                uri = "%s/api/v1/interface/%s/" % (
+                    cls.INTERFACE_DOMAIN, choice)
+                try:
+                    result = requests.get(uri)
+                except:
+                    result = None
+                if result and result.ok:
+                    result = result.json()
+                    if "repo" in result:
+                        return result
+            return {}
 
     def fetch(self, dir_):
         if hasattr(self, "path"):
@@ -265,9 +269,9 @@ class Composer(object):
     def fetch(self):
         layer = Layer(self.charm, self.deps).fetch()
         if not layer.configured:
-            logging.warn("The top level layer expects a "
-                         "valid composer.yaml file, "
-                         "using defaults.")
+            log.info("The top level layer expects a "
+                     "valid composer.yaml file, "
+                     "using defaults.")
         # Manually create a layer object for the output
         self.target = Layer(self.name, self.repo)
         self.target.directory = self.target_dir
@@ -330,7 +334,7 @@ class Composer(object):
 
     def plan_layers(self, layers, output_files):
         for i, layer in enumerate(layers["layers"]):
-            log.info("Processing layer: %s", layer.directory.name)
+            log.info("Processing layer: %s", layer.url)
             # walk the layer, consulting the config
             # and creating an entry
             # later layers in the list might modify
@@ -465,6 +469,7 @@ class Composer(object):
 
 
 def configLogging(composer):
+    global log
     clifmt = utils.ColoredFormatter(
         blessings.Terminal(),
         '%(name)s: %(message)s')
@@ -474,7 +479,24 @@ def configLogging(composer):
     if isinstance(composer.log_level, str):
         composer.log_level = composer.log_level.upper()
     root_logger.setLevel(composer.log_level)
+    log.setLevel(composer.log_level)
     root_logger.addHandler(clihandler)
+    requests_logger = logging.getLogger("requests")
+    requests_logger.setLevel(logging.WARNING)
+
+
+def normalize_outputdir(composer):
+    od = path(composer.charm).normpath()
+    repo = os.environ.get('JUJU_REPOSITORY')
+    if repo:
+        repo = path(repo)
+        if repo.exists():
+            od = repo
+    elif ":" in od:
+        od = od.basename
+    log.info("Composing into {}".format(od))
+    composer.output_dir = od
+    return od
 
 
 def inspect(args=None):
@@ -505,12 +527,11 @@ def main(args=None):
     parser.parse_args(args, namespace=composer)
     # Monkey patch in the domain for the interface webservice
     InterfaceFetcher.INTERFACE_DOMAIN = composer.interface_service
-
+    configLogging(composer)
     if not composer.name:
         composer.name = path(composer.charm).normpath().basename()
     if not composer.output_dir:
-        composer.output_dir = path(composer.charm).normpath()
-    configLogging(composer)
+        normalize_outputdir(composer)
     composer()
 
 

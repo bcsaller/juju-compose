@@ -5,6 +5,8 @@ from ruamel import yaml
 from .path import path
 import utils
 
+log = logging.getLogger(__name__)
+
 
 class Tactic(object):
     """
@@ -26,7 +28,6 @@ class Tactic(object):
         self._target = target
         self._raw_data = None
         self._config = config
-        self.warnings = []
 
     def __call__(self):
         raise NotImplementedError
@@ -105,7 +106,7 @@ class CopyTactic(Tactic):
         if not should_ignore(self.relpath):
             return
         target = self.target_file
-        logging.debug("Copying %s: %s", self.layer_name, target)
+        log.debug("Copying %s: %s", self.layer_name, target)
         # Ensure the path exists
         target.dirname().makedirs_p()
         if (self.entity != target) and not target.exists() \
@@ -140,8 +141,8 @@ class InterfaceCopy(Tactic):
         # copy the entire tree into the
         # hooks/relations/<interface>
         # directory
-        logging.debug("Copying Interface %s: %s",
-                      self.interface.name, self.target)
+        log.debug("Copying Interface %s: %s",
+                  self.interface.name, self.target)
         # Ensure the path exists
         if self.target.exists():
             # XXX: fix this to do actual updates
@@ -311,7 +312,7 @@ class ComposerYAML(YAMLTactic):
         # The split should result in the series/charm path only
         # XXX: there will be strange interactions with cs: vs local:
         if 'is' not in data:
-            data['is'] = "/".join(self.current.directory.splitall()[-2:])
+            data['is'] = str(self.current.url)
         inc = data.get('includes', [])
         norm = []
         for i in inc:
@@ -388,7 +389,7 @@ class InstallerTactic(Tactic):
                        "-t",
                        target,
                        spec)).throw_on_error()()
-        logging.debug("pip installed {} to {}".format(
+        log.debug("pip installed {} to {}".format(
             spec, self.target))
 
 

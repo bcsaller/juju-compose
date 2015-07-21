@@ -26,7 +26,7 @@ class TestCompose(unittest.TestCase):
         composer.output_dir = "out"
         composer.series = "trusty"
         composer.name = "foo"
-        composer.charm = "tests/trusty/tester"
+        composer.charm = "trusty/tester"
         composer()
         base = path('out/trusty/foo')
         self.assertTrue(base.exists())
@@ -88,7 +88,7 @@ class TestCompose(unittest.TestCase):
         composer.output_dir = "out"
         composer.series = "trusty"
         composer.name = "foo"
-        composer.charm = "tests/trusty/b"
+        composer.charm = "trusty/b"
         composer()
         base = path('out/trusty/foo')
         self.assertTrue(base.exists())
@@ -158,7 +158,7 @@ class TestCompose(unittest.TestCase):
         composer.output_dir = "out"
         composer.series = "trusty"
         composer.name = "foo"
-        composer.charm = "tests/trusty/c-reactive"
+        composer.charm = "trusty/c-reactive"
         composer()
         base = path('out/trusty/foo')
         self.assertTrue(base.exists())
@@ -178,7 +178,7 @@ class TestCompose(unittest.TestCase):
         composer.output_dir = "out"
         composer.series = "trusty"
         composer.name = "foo"
-        composer.charm = "tests/trusty/chlayer"
+        composer.charm = "trusty/chlayer"
         composer()
 
         base = path('out/trusty/foo')
