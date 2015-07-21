@@ -171,6 +171,39 @@ class TestCompose(unittest.TestCase):
         main = base / "hooks/reactive/main.py"
         self.assertTrue(main.exists())
 
+    @responses.activate
+    def test_remote_layer(self):
+        responses.add(responses.GET,
+                      "http://localhost:8888/api/v1/layer/basic/",
+                      body='''{
+                      "id": "basic",
+                      "name": "basic",
+                      "repo":
+                      "https://git.launchpad.net/~bcsaller/charms/+source/basic",
+                      "_id": {
+                          "$oid": "55a471959c1d246feae487e5"
+                      },
+                      "version": 1
+                      }''',
+                      content_type="application/json")
+        composer = juju_compose.Composer()
+        composer.log_level = "WARNING"
+        composer.output_dir = "out"
+        composer.series = "trusty"
+        composer.name = "foo"
+        composer.charm = "trusty/use-layers"
+        composer()
+        base = path('out/trusty/foo')
+        self.assertTrue(base.exists())
+
+        # basics
+        self.assertTrue((base / "README.md").exists())
+        self.assertTrue((base / "metadata.yaml").exists())
+
+        # show that we pulled charmhelpers from the basic layer as well
+        self.assertTrue((base / "hooks/charmhelpers/__init__.py").exists())
+        self.assertFalse((base / "hooks/charmhelpers.pypi").exists())
+
     def test_pypi_installer(self):
         composer = juju_compose.Composer()
         composer.log_level = "WARN"

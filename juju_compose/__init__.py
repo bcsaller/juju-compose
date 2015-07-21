@@ -42,16 +42,20 @@ fetchers.FETCHERS.insert(0, RepoFetcher)
 class InterfaceFetcher(fetchers.LocalFetcher):
     # XXX: When hosted somewhere, fix this
     INTERFACE_DOMAIN = "http://localhost:8888"
+    NAMESPACE = "interface"
+    ENVIRON = "INTERFACE_PATH"
+    OPTIONAL_PREFIX = "juju-relation-"
+    ENDPOINT = "/api/v1/interface"
 
     @classmethod
     def can_fetch(cls, url):
         # Search local path first, then
         # the interface webservice
-        if url.startswith("interface:"):
-            url = url[10:]
+        if url.startswith("{}:".format(cls.NAMESPACE)):
+            url = url[len(cls.NAMESPACE) + 1:]
             search_path = [path(os.getcwd()) / "interfaces",
                            os.environ.get("JUJU_REPOSITORY", ".")]
-            cp = os.environ.get("INTERFACE_PATH")
+            cp = os.environ.get(cls.ENVIRON)
             if cp:
                 search_path.extend(cp.split(os.pathsep))
             for part in search_path:
@@ -60,11 +64,11 @@ class InterfaceFetcher(fetchers.LocalFetcher):
                     return dict(path=p)
 
             choices = [url]
-            if url.startswith("juju-relation-"):
-                choices.append(url[len("juju-relation-"):])
+            if url.startswith(cls.OPTIONAL_PREFIX):
+                choices.append(url[len(cls.OPTIONAL_PREFIX):])
             for choice in choices:
-                uri = "%s/api/v1/interface/%s/" % (
-                    cls.INTERFACE_DOMAIN, choice)
+                uri = "%s%s/%s/" % (
+                    cls.INTERFACE_DOMAIN, cls.ENDPOINT, choice)
                 try:
                     result = requests.get(uri)
                 except:
@@ -95,6 +99,16 @@ class InterfaceFetcher(fetchers.LocalFetcher):
 
 
 fetchers.FETCHERS.insert(0, InterfaceFetcher)
+
+
+class LayerFetcher(InterfaceFetcher):
+    INTERFACE_DOMAIN = "http://localhost:8888"
+    NAMESPACE = "layer"
+    ENVIRON = "COMPOSER_PATH"
+    OPTIONAL_PREFIX = "juju-layer-"
+    ENDPOINT = "/api/v1/layer"
+
+fetchers.FETCHERS.insert(0, LayerFetcher)
 
 
 class LaunchpadGitFetcher(Fetcher):
@@ -136,71 +150,25 @@ class Configable(object):
         return bool(self.config is not None and self.config.configured())
 
 
-class Interface(Configable):
-    CONFIG_FILE = "interface.yaml"
-
+class Fetched(Configable):
     def __init__(self, url, target_repo, name=None):
-        super(Interface, self).__init__()
+        super(Fetched, self).__init__()
         self.url = url
         self.target_repo = target_repo
         self.directory = None
         self._name = name
 
-    def __repr__(self):
-        return "<Interface {}:{}>".format(self.url, self.directory)
-
     @property
     def name(self):
         if self._name:
             return self._name
-        if self.url.startswith("interface:"):
-            return self.url[10:]
+        if self.url.startswith(self.NAMESPACE):
+            return self.url[len(self.NAMESPACE):]
         return self.url
 
-    def fetch(self):
-        try:
-            fetcher = fetchers.get_fetcher(self.url)
-        except fetchers.FetchError:
-            # We might be passing a local dir path directly
-            # which fetchers don't currently  support
-            self.directory = path(self.url)
-        else:
-            if isinstance(fetcher, fetchers.LocalFetcher) \
-                    and not hasattr(fetcher, "repo"):
-                self.directory = path(fetcher.path)
-            else:
-                self.directory = path(fetcher.fetch(self.target_repo))
-
-        if not self.directory.exists():
-            raise OSError(
-                "Unable to locate {}. "
-                "Do you need to set INTERFACE_PATH?".format(
-                    self.url))
-
-        self.config_file = self.directory / self.CONFIG_FILE
-        self._name = self.config.name
-        return self
-
-    def install(self, kind, name):
-        """Kind is provides, requires or peer, name is the name in the charm"""
-        pass
-
-
-class Layer(Configable):
-    CONFIG_FILE = "composer.yaml"
-
-    def __init__(self, url, target_repo):
-        super(Layer, self).__init__()
-        self.url = url
-        self.target_repo = target_repo
-        self.directory = None
-
     def __repr__(self):
-        return "<Layer {}:{}>".format(self.url, self.directory)
-
-    @property
-    def name(self):
-        return path("/".join(self.directory.splitall()[-2:]))
+        return "<{} {}:{}>".format(self.__class__.__name__,
+                                   self.url, self.directory)
 
     def __div__(self, other):
         return self.directory / other
@@ -214,18 +182,34 @@ class Layer(Configable):
             self.directory = path(self.url)
         else:
             if isinstance(fetcher, fetchers.LocalFetcher):
-                self.directory = path(fetcher.path)
+                if hasattr(fetcher, "repo"):
+                    self.directory = path(fetcher.fetch(self.target_repo))
+                elif hasattr(fetcher, "path"):
+                    self.directory = path(fetcher.path)
             else:
                 self.directory = path(fetcher.fetch(self.target_repo))
 
         if not self.directory.exists():
             raise OSError(
                 "Unable to locate {}. "
-                "Do you need to set JUJU_REPOSITY or COMPOSER_PATH?".format(
-                    self.url))
+                "Do you need to set {}?".format(
+                    self.url, self.ENVIRON))
 
         self.config_file = self.directory / self.CONFIG_FILE
+        self._name = self.config.name
         return self
+
+
+class Interface(Fetched):
+    CONFIG_FILE = "interface.yaml"
+    NAMESPACE = "interface"
+    ENVIRON = "INTERFACE_PATH"
+
+
+class Layer(Fetched):
+    CONFIG_FILE = "composer.yaml"
+    NAMESPACE = "layer"
+    ENVIRON = "COMPOSER_PATH"
 
 
 class Composer(object):
@@ -359,6 +343,8 @@ class Composer(object):
         charm_meta = output_files.get("metadata.yaml")
         if charm_meta:
             meta = charm_meta()
+            if not meta:
+                return
             target_config = layers["layers"][-1].config
             specs = []
             used_interfaces = set()
@@ -527,6 +513,7 @@ def main(args=None):
     parser.parse_args(args, namespace=composer)
     # Monkey patch in the domain for the interface webservice
     InterfaceFetcher.INTERFACE_DOMAIN = composer.interface_service
+    LayerFetcher.INTERFACE_DOMAIN = composer.interface_service
     configLogging(composer)
     if not composer.name:
         composer.name = path(composer.charm).normpath().basename()
