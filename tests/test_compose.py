@@ -20,7 +20,6 @@ class TestCompose(unittest.TestCase):
         path("out").rmtree_p()
 
     def test_tester_compose(self):
-        """Integration suite"""
         composer = juju_compose.Composer()
         composer.log_level = "WARNING"
         composer.output_dir = "out"

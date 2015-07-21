@@ -293,7 +293,7 @@ class Composer(object):
     def layers(self):
         layers = []
         for i in self._layers:
-            layers.append(i.name)
+            layers.append(i.url)
         for i in self._interfaces:
             layers.append(i.url)
         layers.append("composer")

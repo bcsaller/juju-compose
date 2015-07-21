@@ -86,7 +86,7 @@ class Tactic(object):
         target = self.target_file
         sig = {}
         if target.exists() and target.isfile():
-            sig[self.relpath] = (self.repo_path,
+            sig[self.relpath] = (self.current.url,
                                  self.kind,
                                  utils.sign(self.target_file))
         return sig
