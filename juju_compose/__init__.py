@@ -111,8 +111,6 @@ class LaunchpadGitFetcher(Fetcher):
 fetchers.FETCHERS.append(LaunchpadGitFetcher)
 
 
-
-
 class Configable(object):
     CONFIG_FILE = None
     CONFIG_KLASS = ComposerConfig
@@ -267,8 +265,9 @@ class Composer(object):
     def fetch(self):
         layer = Layer(self.charm, self.deps).fetch()
         if not layer.configured:
-            raise ValueError("The top level layer needs a "
-                             "valid composer.yaml file")
+            logging.warn("The top level layer expects a "
+                         "valid composer.yaml file, "
+                         "using defaults.")
         # Manually create a layer object for the output
         self.target = Layer(self.name, self.repo)
         self.target.directory = self.target_dir

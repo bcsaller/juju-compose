@@ -8,6 +8,7 @@ import pkg_resources
 import responses
 import unittest
 
+
 class TestCompose(unittest.TestCase):
     def setUp(self):
         dirname = pkg_resources.resource_filename(__name__, ".")
@@ -69,12 +70,14 @@ class TestCompose(unittest.TestCase):
         self.assertEquals(data['signatures']["README.md"], [
             u'trusty/tester',
             "static",
-            u'cfac20374288c097975e9f25a0d7c81783acdbc8124302ff4a731a4aea10de99'])
+            u'cfac20374288c097975e9f25a0d7c81783acdbc81'
+            '24302ff4a731a4aea10de99'])
 
         self.assertEquals(data["signatures"]['metadata.yaml'], [
             u'trusty/tester',
             "dynamic",
-            u'ecb80da834070599ac81190e78448440b442d4eda9cea2e4af3a1db58e60e400'])
+            u'ecb80da834070599ac81190e78448440b442d4eda9'
+            'cea2e4af3a1db58e60e400'])
 
     def test_regenerate_inplace(self):
         # take a generated example where a base layer has changed
@@ -135,20 +138,21 @@ class TestCompose(unittest.TestCase):
         init = base / "hooks/relations/mysql/__init__.py"
         self.assertTrue(init.exists())
 
-
     @responses.activate
     def test_remote_interface(self):
-        responses.add(responses.GET, "http://localhost:8888/api/v1/interface/pgsql",
-                body='''{
+        responses.add(responses.GET,
+                      "http://localhost:8888/api/v1/interface/pgsql/",
+                      body='''{
                       "id": "pgsql",
                       "name": "pgsql4",
-                      "repo": "https://github.com/bcsaller/juju-relation-pgsql.git",
+                      "repo":
+                      "https://github.com/bcsaller/juju-relation-pgsql.git",
                       "_id": {
                           "$oid": "55a471959c1d246feae487e5"
                       },
                       "version": 1
                       }''',
-                  content_type="application/json")
+                      content_type="application/json")
         composer = juju_compose.Composer()
         composer.log_level = "WARNING"
         composer.output_dir = "out"
@@ -167,6 +171,25 @@ class TestCompose(unittest.TestCase):
         self.assertTrue(init.exists())
         main = base / "hooks/reactive/main.py"
         self.assertTrue(main.exists())
+
+    def test_pypi_installer(self):
+        composer = juju_compose.Composer()
+        composer.log_level = "WARN"
+        composer.output_dir = "out"
+        composer.series = "trusty"
+        composer.name = "foo"
+        composer.charm = "tests/trusty/chlayer"
+        composer()
+
+        base = path('out/trusty/foo')
+        self.assertTrue(base.exists())
+
+        # basics
+        hooks = base / "hooks"
+        self.assertTrue(hooks.exists())
+        # show that we pulled the interface from github
+        init = hooks / "charmhelpers/__init__.py"
+        self.assertTrue(init.exists())
 
 
 if __name__ == '__main__':

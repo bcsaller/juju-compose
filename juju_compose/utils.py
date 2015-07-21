@@ -415,7 +415,6 @@ class TermWriter(object):
         if 't' in kwargs:
             raise ValueError("Using reserved token 't' in TermWriter.write")
         kwargs['t'] = self.term
-
         self.fp.write(msg.format(*args, **kwargs))
 
 

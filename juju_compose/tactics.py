@@ -310,7 +310,7 @@ class ComposerYAML(YAMLTactic):
             return
         # The split should result in the series/charm path only
         # XXX: there will be strange interactions with cs: vs local:
-        if not 'is' in data:
+        if 'is' not in data:
             data['is'] = "/".join(self.current.directory.splitall()[-2:])
         inc = data.get('includes', [])
         norm = []
@@ -368,6 +368,30 @@ class ActionTactic(HookTactic):
         return relpath.dirname() == "actions"
 
 
+class InstallerTactic(Tactic):
+    def __str__(self):
+        return "Installing software to {}".format(self.relpath)
+
+    @classmethod
+    def trigger(cls, relpath):
+        ext = relpath.splitext()[1]
+        return ext in [".pypi", ]
+
+    def __call__(self):
+        # install package reference in trigger file
+        # in place directory of target
+        # XXX: Should this map multiline to "-r", self.entity
+        spec = self.entity.text().strip()
+        target = self.target_file.dirname()
+        utils.Process(("pip",
+                       "install",
+                       "-t",
+                       target,
+                       spec)).throw_on_error()()
+        logging.debug("pip installed {} to {}".format(
+            spec, self.target))
+
+
 def load_tactic(dpath, basedir):
     """Load a tactic from the current layer using a dotted path. The last
     element in the path should be a Tactic subclass
@@ -380,6 +404,7 @@ def load_tactic(dpath, basedir):
 
 DEFAULT_TACTICS = [
     ManifestTactic,
+    InstallerTactic,
     MetadataYAML,
     ConfigYAML,
     ComposerYAML,
