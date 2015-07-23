@@ -37,7 +37,6 @@ class TestUtils(TestCase):
         self.assertFalse(rc)
         result.seek(0)
         output = result.read()
-        print output
         self.assertIn("Alpha", output)
         self.assertIn("Beta", output)
         self.assertIn("@when('db.ready'", output)

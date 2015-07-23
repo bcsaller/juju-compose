@@ -2,7 +2,7 @@ import logging
 import json
 from ruamel import yaml
 
-from .path import path
+from path import path
 import utils
 
 log = logging.getLogger(__name__)
@@ -98,6 +98,14 @@ class Tactic(object):
         return None
 
 
+class ExactMatch(object):
+    FILENAME = None
+
+    @classmethod
+    def trigger(cls, relpath):
+        return cls.FILENAME == relpath
+
+
 class CopyTactic(Tactic):
     def __call__(self):
         if self.entity.isdir():
@@ -154,8 +162,7 @@ class InterfaceCopy(Tactic):
                                     kind="files"):
             target = entity.relpath(self.interface.directory)
             target = (self.target / target).normpath()
-            if target.parent and not target.parent.exists():
-                target.parent.makedirs_p()
+            target.parent.makedirs_p()
             entity.copy2(target)
         init = self.target / "__init__.py"
         if not init.exists():
@@ -207,8 +214,7 @@ main('{}')
             if target.exists():
                 # XXX: warn
                 continue
-            if not target.parent.exists():
-                target.parent.makedirs_p()
+            target.parent.makedirs_p()
             target.write_text(self.DEFAULT_BINDING.format(self.relation_name))
             target.chmod(0755)
 
@@ -229,17 +235,15 @@ main('{}')
         return "Bind Interface {}".format(self.interface.name)
 
 
-class ManifestTactic(Tactic):
-    @classmethod
-    def trigger(cls, relpath):
-        return relpath == ".composer.manifest"
+class ManifestTactic(ExactMatch, Tactic):
+    FILENAME = ".composer.manifest"
 
     def __call__(self):
         # Don't copy manifests, they are regenerated
         pass
 
 
-class SerializedTactic(Tactic):
+class SerializedTactic(ExactMatch, Tactic):
     kind = "dynamic"
 
     def __init__(self, *args, **kwargs):
@@ -272,6 +276,8 @@ class SerializedTactic(Tactic):
                 for key in dels:
                     utils.delete_path(key, namespace)
         self.data = data
+        if not self.target_file.parent.exists():
+            self.target_file.parent.makedirs_p()
         self.dump(data)
         return data
 
@@ -300,7 +306,9 @@ class JSONTactic(SerializedTactic):
         json.dump(data, self.target_file.open('w'), indent=2)
 
 
-class ComposerYAML(YAMLTactic):
+class ComposerYAML(YAMLTactic, ExactMatch):
+    FILENAME = "composer.yaml"
+
     def read(self):
         self._raw_data = self.load(self.entity.open())
 
@@ -323,50 +331,23 @@ class ComposerYAML(YAMLTactic):
                 norm.append("/".join(path(i).splitall()[-2:]))
         if norm:
             data['includes'] = norm
+        if not self.target_file.parent.exists():
+            self.target_file.parent.makedirs_p()
         self.dump(data)
         return data
-
-    @classmethod
-    def trigger(cls, relpath):
-        return relpath == "composer.yaml"
 
 
 class MetadataYAML(YAMLTactic):
     """Rule Driven metadata.yaml generation"""
     section = "metadata"
-
-    @classmethod
-    def trigger(cls, relpath):
-        return relpath == "metadata.yaml"
+    FILENAME = "metadata.yaml"
 
 
 class ConfigYAML(MetadataYAML):
     """Rule driven config.yaml generation"""
     section = "config"
     prefix = "options"
-
-    @classmethod
-    def trigger(cls, relpath):
-        return relpath == "config.yaml"
-
-
-class HookTactic(CopyTactic):
-    """Rule Generated Hooks"""
-    def __str__(self):
-        return "Handling Hook {}".format(self.entity)
-
-    @classmethod
-    def trigger(cls, relpath):
-        return relpath.dirname() == "hooks"
-
-
-class ActionTactic(HookTactic):
-    def __str__(self):
-        return "Handling Action {}".format(self.entity)
-
-    @classmethod
-    def trigger(cls, relpath):
-        return relpath.dirname() == "actions"
+    FILENAME = "config.yaml"
 
 
 class InstallerTactic(Tactic):
@@ -384,13 +365,25 @@ class InstallerTactic(Tactic):
         # XXX: Should this map multiline to "-r", self.entity
         spec = self.entity.text().strip()
         target = self.target_file.dirname()
+        target_dir = target / path(spec.split(" ", 1)[0]).normpath().namebase
+        log.debug("pip installing {} as {}".format(
+            spec, target_dir))
         utils.Process(("pip",
                        "install",
+                       "-U",
                        "-t",
                        target,
                        spec)).throw_on_error()()
-        log.debug("pip installed {} to {}".format(
-            spec, self.target))
+
+    def sign(self):
+        """return sign in the form {relpath: (origin layer, SHA256)}
+        """
+        sigs = {}
+        for entry, sig in utils.walk(self.target_file.dirname(),
+                                     utils.sign, kind="files"):
+            relpath = entry.relpath(self._target.directory)
+            sigs[relpath] = (self.current.url, "dynamic", sig)
+        return sigs
 
 
 def load_tactic(dpath, basedir):
@@ -409,7 +402,5 @@ DEFAULT_TACTICS = [
     MetadataYAML,
     ConfigYAML,
     ComposerYAML,
-    HookTactic,
-    ActionTactic,
     CopyTactic
 ]

@@ -5,141 +5,32 @@ import json
 import logging
 import os
 import sys
-import tempfile
 
 import blessings
 from collections import OrderedDict
-from config import DEFAULT_IGNORES
-from .path import path
+from path import path
 import inspector
 import tactics
-from .config import ComposerConfig
-from bundletester import fetchers
-from bundletester.fetchers import git, Fetcher
-import re
-import requests
+from .config import (ComposerConfig, DEFAULT_IGNORES)
+from .fetchers import (InterfaceFetcher,
+                       LayerFetcher,
+                       get_fetcher,
+                       FetchError)
 import utils
 
 log = logging.getLogger("composer")
 
 
-class RepoFetcher(fetchers.LocalFetcher):
-    @classmethod
-    def can_fetch(cls, url):
-        search_path = [os.getcwd(), os.environ.get("JUJU_REPOSITORY", ".")]
-        cp = os.environ.get("COMPOSER_PATH")
-        if cp:
-            search_path.extend(cp.split(":"))
-        for part in search_path:
-            p = (path(part) / url).normpath()
-            if p.exists():
-                return dict(path=p)
-        return {}
-
-fetchers.FETCHERS.insert(0, RepoFetcher)
-
-
-class InterfaceFetcher(fetchers.LocalFetcher):
-    # XXX: When hosted somewhere, fix this
-    INTERFACE_DOMAIN = "http://localhost:8888"
-    NAMESPACE = "interface"
-    ENVIRON = "INTERFACE_PATH"
-    OPTIONAL_PREFIX = "juju-relation-"
-    ENDPOINT = "/api/v1/interface"
-
-    @classmethod
-    def can_fetch(cls, url):
-        # Search local path first, then
-        # the interface webservice
-        if url.startswith("{}:".format(cls.NAMESPACE)):
-            url = url[len(cls.NAMESPACE) + 1:]
-            search_path = [path(os.getcwd()) / "interfaces",
-                           os.environ.get("JUJU_REPOSITORY", ".")]
-            cp = os.environ.get(cls.ENVIRON)
-            if cp:
-                search_path.extend(cp.split(os.pathsep))
-            for part in search_path:
-                p = (path(part) / url).normpath()
-                if p.exists():
-                    return dict(path=p)
-
-            choices = [url]
-            if url.startswith(cls.OPTIONAL_PREFIX):
-                choices.append(url[len(cls.OPTIONAL_PREFIX):])
-            for choice in choices:
-                uri = "%s%s/%s/" % (
-                    cls.INTERFACE_DOMAIN, cls.ENDPOINT, choice)
-                try:
-                    result = requests.get(uri)
-                except:
-                    result = None
-                if result and result.ok:
-                    result = result.json()
-                    if "repo" in result:
-                        return result
-            return {}
-
-    def fetch(self, dir_):
-        if hasattr(self, "path"):
-            return super(InterfaceFetcher, self).fetch(dir_)
-        elif hasattr(self, "repo"):
-            # use the github fetcher for now
-            u = self.url[10:]
-            f = fetchers.get_fetcher(self.repo)
-            if hasattr(f, "repo"):
-                basename = path(f.repo).name.splitext()[0]
-            else:
-                basename = u
-            res = f.fetch(dir_)
-            target = dir_ / basename
-            if res != target:
-                target.rmtree_p()
-                path(res).rename(target)
-            return target
-
-
-fetchers.FETCHERS.insert(0, InterfaceFetcher)
-
-
-class LayerFetcher(InterfaceFetcher):
-    INTERFACE_DOMAIN = "http://localhost:8888"
-    NAMESPACE = "layer"
-    ENVIRON = "COMPOSER_PATH"
-    OPTIONAL_PREFIX = "juju-layer-"
-    ENDPOINT = "/api/v1/layer"
-
-fetchers.FETCHERS.insert(0, LayerFetcher)
-
-
-class LaunchpadGitFetcher(Fetcher):
-    # XXX: this should be upstreamed
-    MATCH = re.compile(r"""
-    ^(git:|https)?://git.launchpad.net/
-    (?P<repo>[^@]*)(@(?P<revision>.*))?$
-    """, re.VERBOSE)
-
-    def fetch(self, dir_):
-        dir_ = tempfile.mkdtemp(dir=dir_)
-        url = 'https://git.launchpad.net/' + self.repo
-        git('clone {} {}'.format(url, dir_))
-        if self.revision:
-            git('checkout {}'.format(self.revision), cwd=dir_)
-        return dir_
-
-fetchers.FETCHERS.append(LaunchpadGitFetcher)
-
-
 class Configable(object):
     CONFIG_FILE = None
-    CONFIG_KLASS = ComposerConfig
 
     def __init__(self):
-        self._config = self.CONFIG_KLASS()
+        self._config = ComposerConfig()
         self.config_file = None
 
     @property
     def config(self):
-        if self._config.configured():
+        if self._config.configured:
             return self._config
         if self.config_file and self.config_file.exists():
             self._config.configure(self.config_file)
@@ -147,7 +38,7 @@ class Configable(object):
 
     @property
     def configured(self):
-        return bool(self.config is not None and self.config.configured())
+        return bool(self.config is not None and self.config.configured)
 
 
 class Fetched(Configable):
@@ -175,18 +66,17 @@ class Fetched(Configable):
 
     def fetch(self):
         try:
-            fetcher = fetchers.get_fetcher(self.url)
-        except fetchers.FetchError:
+            fetcher = get_fetcher(self.url)
+        except FetchError:
             # We might be passing a local dir path directly
             # which fetchers don't currently  support
             self.directory = path(self.url)
         else:
-            if isinstance(fetcher, fetchers.LocalFetcher):
-                if hasattr(fetcher, "repo"):
-                    self.directory = path(fetcher.fetch(self.target_repo))
-                elif hasattr(fetcher, "path"):
-                    self.directory = path(fetcher.path)
+            if hasattr(fetcher, "path") and fetcher.path.exists():
+                self.directory = path(fetcher.path)
             else:
+                if not self.target_repo.exists():
+                    self.target_repo.makedirs_p()
                 self.directory = path(fetcher.fetch(self.target_repo))
 
         if not self.directory.exists():
@@ -219,20 +109,16 @@ class Composer(object):
     def __init__(self):
         self.config = ComposerConfig()
         self.force = False
-
-    def configure(self, config_file):
-        self.charm = path(self.charm)
-        self.config.configure(config_file)
-        self.config.validate()
+        self.inplace = False
 
     def create_repo(self):
         # Generated output will go into this directory
         base = path(self.output_dir)
-        self.repo = (base / self.series).makedirs_p()
+        self.repo = (base / self.series)
         # And anything it includes from will be placed here
         # outside the series
-        self.deps = (base / "deps" / self.series).makedirs_p()
-        self.target_dir = (self.repo / self.name).mkdir_p()
+        self.deps = (base / "deps" / self.series)
+        self.target_dir = (self.repo / self.name)
 
     def find_or_create_repo(self, allow_create=True):
         # see if output dir is already in a repo, we can use that directly
@@ -242,7 +128,7 @@ class Composer(object):
             if self.output_dir.parent.basename() == self.series:
                 # we're already in a repo
                 self.repo = self.output_dir.parent.parent
-                self.deps = (self.repo / "deps" / self.series).makedirs_p()
+                self.deps = (self.repo / "deps" / self.series)
                 self.target_dir = self.output_dir
                 return
         if allow_create:
@@ -317,18 +203,16 @@ class Composer(object):
         output_files[relname] = tactic
 
     def plan_layers(self, layers, output_files):
+        config = ComposerConfig()
+        config = config.add_config(
+            layers["layers"][0] / ComposerConfig.DEFAULT_FILE, True)
+
         for i, layer in enumerate(layers["layers"]):
             log.info("Processing layer: %s", layer.url)
-            # walk the layer, consulting the config
-            # and creating an entry
-            # later layers in the list might modify
-            # the contributions of layers before it
-            # (as they act as basec``lasses)
-            # actually invoke it
             if i + 1 < len(layers["layers"]):
-                config = layers["layers"][i + 1].config
-            else:
-                config = None
+                next_layer = layers["layers"][i + 1]
+                config = config.add_config(
+                    next_layer / ComposerConfig.DEFAULT_FILE, True)
             list(e for e in utils.walk(layer.directory,
                                        self.build_tactics,
                                        current=layer,
@@ -504,19 +388,20 @@ def main(args=None):
     parser.add_argument('-o', '--output-dir')
     parser.add_argument('-s', '--series', default="trusty")
     parser.add_argument('--interface-service',
-                        default="http://localhost:8888")
+                        default="http://localhost:9999")
     parser.add_argument('-n', '--name',
                         default=path(os.getcwd).dirname(),
                         help="Generate a charm of 'name' from 'charm'")
-    parser.add_argument('charm', default=".", type=path)
+    parser.add_argument('charm', nargs="?", default=".", type=path)
     # Namespace will set the options as attrs of composer
     parser.parse_args(args, namespace=composer)
     # Monkey patch in the domain for the interface webservice
     InterfaceFetcher.INTERFACE_DOMAIN = composer.interface_service
     LayerFetcher.INTERFACE_DOMAIN = composer.interface_service
     configLogging(composer)
+
     if not composer.name:
-        composer.name = path(composer.charm).normpath().basename()
+        composer.name = path(composer.charm).normpath().name
     if not composer.output_dir:
         normalize_outputdir(composer)
     composer()

@@ -1,4 +1,4 @@
-from juju_compose.path import path
+from path import path
 from ruamel import yaml
 import json
 import juju_compose

@@ -4,6 +4,8 @@ from .tactics import DEFAULT_TACTICS, load_tactic
 import pathspec
 from ruamel import yaml
 import logging
+from path import path
+from otherstuf import chainstuf
 
 DEFAULT_IGNORES = [
     ".bzr/",
@@ -14,28 +16,48 @@ DEFAULT_IGNORES = [
 ]
 
 
-class ComposerConfig(dict):
+class ComposerConfig(chainstuf):
     """Defaults for controlling the generator, each layer in
     the inclusion graph can provide values, including things
     like overrides, or warnings if things are overridden that
     shouldn't be.
     """
+    DEFAULT_FILE = "composer.yaml"
+
     def __init__(self, *args, **kwargs):
         super(ComposerConfig, self).__init__(*args, **kwargs)
-        self._tactics = []
+        self['_tactics'] = []
+        self.configured = False
 
     def __getattr__(self, key):
         return self[key]
 
-    def configure(self, config_file):
+    def rget(self, key):
+        """Combine all the results from all the layers into a single iter"""
+        result = []
+        for m in self.maps:
+            r = m.get(key)
+            if r:
+                if isinstance(r, (list, tuple)):
+                    result.extend(r)
+                else:
+                    result.append(r)
+        return result
+
+    def configure(self, config_file, allow_missing=False):
+        config_file = path(config_file)
+        data = None
+        if not config_file.exists() and not allow_missing:
+            raise OSError("Missing Config File {}".format(config_file))
         try:
-            data = yaml.load(config_file.open())
+            if config_file.exists():
+                data = yaml.load(config_file.open())
+                self.configured = True
         except yaml.parser.ParserError:
             logging.critical("Malformed Config file: {}".format(config_file))
             raise
         if data:
             self.update(data)
-        self.validate()
         # look at any possible imports and use them to build tactics
         tactics = self.get('tactics')
         basedir = config_file.dirname()
@@ -45,32 +67,33 @@ class ComposerConfig(dict):
                 self._tactics.append(tactic)
         return self
 
-    def configured(self):
-        return bool(len(self) > 0)
+    @classmethod
+    def from_config(cls, config_file, allow_missing=False):
+        c = cls()
+        c.configure(config_file, allow_missing)
+        return c
 
-    def validate(self):
-        return True
-
-    @property
-    def ignores(self):
-        return self.get('ignore', []) + DEFAULT_IGNORES
+    def add_config(self, config_file, allow_missing=False):
+        c = self.new_child()
+        c.configure(config_file, allow_missing)
+        return c
 
     @property
     def name(self):
         return self.get('name')
 
+    @property
+    def ignores(self):
+        return self.rget('ignore') + DEFAULT_IGNORES
+
     def tactics(self):
         # XXX: combine from config layer
-        return self._tactics + DEFAULT_TACTICS[:]
+        return self.rget('_tactics') + DEFAULT_TACTICS
 
     def tactic(self, entity, current, target, next_config):
-        # There are very few special file types we do anything with
-        # metadata.yaml
-        # config.yaml
-        # hooks
-        # actions
-        # XXX: resources.yaml
-        # anything else
+        # Produce a tactic for the entity in question
+        # These will be accumulate through the layers
+        # and executed later
         bd = current.directory
         # Ignore handling
         if next_config:

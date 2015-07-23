@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from diff_match_patch import diff_match_patch
 import blessings
 import pathspec
-from .path import path
+from path import path
 
 log = logging.getLogger('utils')
 
@@ -341,7 +341,7 @@ def sign(pathobj):
     p = path(pathobj)
     if not p.isfile():
         return None
-    return hashlib.sha256(p.text()).hexdigest()
+    return hashlib.sha256(p.bytes()).hexdigest()
 
 
 def delta_signatures(manifest_filename, ignorer=None):

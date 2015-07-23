@@ -6,3 +6,5 @@ blessings
 bzr+lp:~johnsca/charm-helpers/reactive/
 requests
 responses
+path.py
+otherstuf
