@@ -120,4 +120,12 @@ TODO:
 layers
 
 
+Trying it out
+=============
+
+If you're a Docker user you can quickly try this out with out installing the many deps locally or 
+dealing with virtualenvs.
+
+docker build -t compose .
+docker run -it --rm compose <args>
 
