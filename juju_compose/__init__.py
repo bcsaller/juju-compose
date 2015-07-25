@@ -9,13 +9,12 @@ import sys
 import blessings
 from collections import OrderedDict
 from path import path
-import inspector
-import tactics
-from .config import (ComposerConfig, DEFAULT_IGNORES)
-from .fetchers import (InterfaceFetcher,
-                       LayerFetcher,
-                       get_fetcher,
-                       FetchError)
+from juju_compose import inspector, tactics
+from juju_compose.config import (ComposerConfig, DEFAULT_IGNORES)
+from juju_compose.fetchers import (InterfaceFetcher,
+                                   LayerFetcher,
+                                   get_fetcher,
+                                   FetchError)
 import utils
 
 log = logging.getLogger("composer")
@@ -307,7 +306,7 @@ class Composer(object):
     def validate(self):
         p = self.target_dir / ".composer.manifest"
         if not p.exists():
-            return
+            return [], [], []
         ignorer = utils.ignore_matcher(DEFAULT_IGNORES)
         a, c, d = utils.delta_signatures(p, ignorer)
 
@@ -328,6 +327,7 @@ class Composer(object):
             else:
                 raise ValueError(
                     "Unable to continue due to unexpected modifications")
+        return a, c, d
 
     def __call__(self):
         self.find_or_create_repo()
